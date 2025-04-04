@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Result</title>
+</head>
+<body>
+    <h1>Input Summary</h1>
+    <ul>
+        <li>Date: {{ data.date }}</li>
+        <li>Time: {{ data.time }}</li>
+        <li>Latitude: {{ data.latitude }}</li>
+        <li>Longitude: {{ data.longitude }}</li>
+    </ul>
+    <a href="{% url 'satellite_input' %}">Back</a>
+</body>
+</html>
