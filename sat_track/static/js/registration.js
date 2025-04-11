@@ -13,13 +13,11 @@ const confirmPasswordError = document.getElementById("confirm-password-error")
 
 email.addEventListener("blur", function (e) {
     const email = e.target.value;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if(!email.includes('@')){
+    if (!emailRegex.test(email)) {
         emailFlag = false;
-        emailError.textContent = "podaj poprawny email"
-    }else if (email.length < 3)  {
-        emailFlag = false;
-        emailFlag.textContent = "podaj poprawny email";
+        emailError.textContent = "podaj poprawny email";
     } else if(password.length > 65) {
         emailFlag = false;
         emailFlag.textContent = "podaj poprawny email";
@@ -74,10 +72,11 @@ confirmPassword.addEventListener("blur", function () {
 submitButton.addEventListener("click", function () {
 
     if(emailFlag && passwordFlag && confirmPasswordFlag){
-        console.log("wszystko ok")
-        document.querySelector('form').submit();  // Submit the form programmatically
+        document.getElementById("submit-error").textContent = ""
+        document.querySelector('form').submit();
+
     }else{
-        console.log("nie jest ok")
+        document.getElementById("submit-error").textContent = "uzupełnij wszystkie dane"
     }
 }
 )

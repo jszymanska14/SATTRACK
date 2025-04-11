@@ -3,18 +3,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>FindYourSatellite</title>
 
 </head>
 <body>
 <div><p>utwórz swoje konto do śledzenia satelit</p></div>
 <form method="post" action="{% url 'register' %}">
         {% csrf_token %}
-    {{ form.errors }}
-        <label for="email">e-mail:</label><br>
+    <div id="submit-error" class="error-placeholder"></div>
+    <label for="email">e-mail:</label><br>
     <input id="email" name="email" placeholder="e-mail"><br><br>
-    <div id="email-error" class="error-placeholder"></div>
-
+    <div id="email-error" class="error-placeholder">
+        {% if form.email.errors %}
+            {{ form.email.errors.0 }}
+        {% endif %}
+    </div>
     <label for="password">hasło: (co najmniej: 5 znaków, 1 litera, 1 cyfra)</label><br>
     <input id="password" name="password" type="password" placeholder="hasło"><br><br>
     <div id="password-error" class="error-placeholder"></div>
@@ -25,7 +28,7 @@
 
     <input id="submit-button" type="button" value="zapisz się">
 </form>
-    <script src="{% static 'registration.js' %}"></script>
+    <script src="{% static 'js/registration.js' %}"></script>
 
 </body>
 </html>
