@@ -1,0 +1,29 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FindYourSatellite</title>
+
+</head>
+<body>
+<div><p>zaloguj się</p></div>
+<form method="post" action="{% url 'sign_in' %}">
+    {% csrf_token %}
+
+    <label for="email">e-mail:</label><br>
+    <input id="email" name="email" placeholder="e-mail"><br><br>
+    <div id="email-error" class="error-placeholder"></div>
+
+    <label for="password">hasło: (co najmniej: 5 znaków, 1 litera, 1 cyfra)</label><br>
+    <input id="password" name="password" type="password" placeholder="hasło"><br><br>
+    <div id="password-error" class="error-placeholder"></div>
+
+        <div id="submit-error" class="error-placeholder"></div>
+
+    <input id="submit-button" type="button" value="zaloguj">
+</form>
+    <script type="module" src="{% static 'js/sign_in.js' %}"></script>
+
+</body>
+</html>

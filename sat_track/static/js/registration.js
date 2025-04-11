@@ -1,3 +1,6 @@
+import { validateEmail, validatePassword, handleSubmit } from "./user_utils.js";
+
+
 let emailFlag = false;
 let passwordFlag = false;
 let confirmPasswordFlag = false;
@@ -10,48 +13,20 @@ const submitButton = document.getElementById("submit-button");
 const emailError = document.getElementById("email-error")
 const passwordError = document.getElementById("password-error")
 const confirmPasswordError = document.getElementById("confirm-password-error")
+const submitButtonError = document.getElementById("submit-error")
+const form = document.querySelector("form")
+
 
 email.addEventListener("blur", function (e) {
-    const email = e.target.value;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    emailFlag = validateEmail(email, emailError);
 
-    if (!emailRegex.test(email)) {
-        emailFlag = false;
-        emailError.textContent = "podaj poprawny email";
-    } else if(password.length > 65) {
-        emailFlag = false;
-        emailFlag.textContent = "podaj poprawny email";
-    } else {
-        emailFlag = true;
-        emailError.textContent = ""
-    }
 }
 )
 
 password.addEventListener("blur", function () {
-
-    const password = document.getElementById("password").value;
-
-    if (password.length < 5)  {
-        passwordFlag = false;
-        passwordError.textContent = "hasło musi mieć przynajmniej 5 znaków";
-        document.getElementById("password").value = "";
-    } else if(password.length > 30) {
-        passwordFlag = false;
-        passwordError.textContent = "hasło musi mieć nie więcej niż 30 znaków";
-        document.getElementById("password").value = "";
-    } else if (!/[a-zA-Z]/.test(password)){
-        passwordFlag = false;
-        passwordError.textContent = "hasło musi mieć przynajmniej jedną literę"
-        document.getElementById("password").value = "";
-    } else if (!/\d/.test(password)){
-        passwordFlag = false;
-        passwordError.textContent = "hasło musi mieć przynajmniej jedną cyfrę"
-        document.getElementById("password").value = "";
-    } else {
-        passwordFlag = true;
-        enteredPassword = password;
-        passwordError.textContent = ""
+    passwordFlag = validatePassword(password, passwordError);
+    if (passwordFlag) {
+        enteredPassword = password.value;
     }
 })
 
@@ -69,14 +44,26 @@ confirmPassword.addEventListener("blur", function () {
     }
 })
 
-submitButton.addEventListener("click", function () {
+// submitButton.addEventListener("click", () => {
+//     // handleSubmit(form, submitButtonError, [emailFlag, passwordFlag, confirmPasswordFlag]);
+//     if (emailFlag && passwordFlag && confirmPasswordFlag) {
+//         form.submit();
+//     } else {
+//         submitButtonError.textContent = "uzupełnij wszystkie dane";
+//     }
+// });
 
-    if(emailFlag && passwordFlag && confirmPasswordFlag){
-        document.getElementById("submit-error").textContent = ""
-        document.querySelector('form').submit();
-
-    }else{
-        document.getElementById("submit-error").textContent = "uzupełnij wszystkie dane"
-    }
-}
-)
+submitButton.addEventListener("click", () => {
+    handleSubmit(
+        form,
+        submitButtonError,
+        [emailFlag, passwordFlag, confirmPasswordFlag],
+        "/register/",
+        (redirectUrl) => window.location.href = redirectUrl,
+        (field, message) => {
+            if (field === "email") emailError.textContent = message;
+            if (field === "password") passwordError.textContent = message;
+            if (field === "confirm-password") confirmPasswordError.textContent = message;
+        }
+    );
+});
