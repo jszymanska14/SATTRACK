@@ -18,7 +18,8 @@
             display: block;
             margin: 10px 0 5px;
         }
-        input[type="datetime-local"] {
+        input[type="date"],
+        input[type="time"] {
             padding: 5px;
             margin-bottom: 10px;
         }
@@ -30,14 +31,12 @@
 </head>
 <body>
 
-<!-- Logowanie / Rejestracja -->
 <div id="registration-button">
     <button>zarejestruj się</button>
 </div>
 <div id="sign-in-button">
     <button>zaloguj się</button>
 </div>
-
 
 {% if request.session.user_id %}
 <form method="post" action="{% url 'logout' %}">
@@ -46,21 +45,21 @@
 </form>
 {% endif %}
 
-
 <form method="post">
     {% csrf_token %}
 
-    <label for="{{ form.timestamp.id_for_label }}">Wybierz termin (data + godzina):</label>
-    {{ form.timestamp }}
+    <label for="{{ form.date.id_for_label }}">Wybierz datę:</label>
+    {{ form.date }}
+
+    <label for="{{ form.time.id_for_label }}">Wybierz godzinę:</label>
+    {{ form.time }}
 
     {{ form.area_geojson }}
 
     <button type="submit" id="save-btn" disabled>Zapisz</button>
 </form>
 
-
 <div id="map"></div>
-
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
@@ -91,7 +90,6 @@
     });
     map.addControl(drawControl);
 
-    // obsługa zaznaczenia na mapie
     map.on(L.Draw.Event.CREATED, function (e) {
         drawnItems.clearLayers();
         const layer = e.layer;
@@ -101,16 +99,18 @@
         checkFormReady();
     });
 
-
-    const datetimeInput = document.getElementById("id_timestamp");
+    const dateInput = document.getElementById("id_date");
+    const timeInput = document.getElementById("id_time");
     const saveBtn = document.getElementById("save-btn");
 
-    datetimeInput.addEventListener("input", checkFormReady);
+    dateInput.addEventListener("input", checkFormReady);
+    timeInput.addEventListener("input", checkFormReady);
 
     function checkFormReady() {
-        const dateFilled = datetimeInput.value.trim() !== "";
+        const dateFilled = dateInput.value.trim() !== "";
+        const timeFilled = timeInput.value.trim() !== "";
         const geoFilled = document.getElementById("id_area_geojson").value.trim() !== "";
-        saveBtn.disabled = !(dateFilled && geoFilled);
+        saveBtn.disabled = !(dateFilled && timeFilled && geoFilled);
     }
 
     document.getElementById("registration-button").addEventListener("click", function() {
