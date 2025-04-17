@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from turtle import shape
 
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.hashers import make_password, check_password
@@ -10,6 +12,7 @@ from django.views.generic import CreateView
 from .forms import EventForm
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
+from django.contrib.sites import requests
 
 
 
@@ -130,6 +133,7 @@ class SignInView(View):
 
 
     def get(self, request):
+
         # Just render the HTML page for non-AJAX GET requests
         return render(request, 'sign_in.html')
 
@@ -142,3 +146,34 @@ class SignInView(View):
         else:
             form = EventForm()
         return render(request, 'event_form.html', {'form': form})
+
+
+def weather_panel(request):
+    location_query = request.GET.get("location")
+
+    if not location_query:
+        return render(request, "weather_panel.html", {
+            "error": "Podaj lokalizację, aby wyświetlić pogodę."
+        })
+
+    api_key = "0ddb12030aa8441484a95953251704"
+    url = f"https://api.weatherapi.com/v1/forecast.json?key={api_key}&q={location_query}&days=3&lang=pl"
+
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        return render(request, "weather_panel.html", {
+            "error": f"Nie udało się pobrać danych pogodowych: {e}"
+        })
+
+    forecast_days = data.get("forecast", {}).get("forecastday", [])
+
+    context = {
+        "forecast_days": forecast_days,
+        "location": data.get("location", {}),
+        "current": data.get("current", {}),
+    }
+
+    return render(request, "weather_panel.html", context)

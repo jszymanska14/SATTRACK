@@ -17,9 +17,8 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
-
 from sat_track import views
-from sat_track.views import RegistrationView, SignInView, user_profile
+from sat_track.views import RegistrationView, SignInView, user_profile, weather_panel
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,6 +26,9 @@ urlpatterns = [
     path('login/', SignInView.as_view(), name='login'),
     path('profile/', user_profile, name='profile'),
     path('event/<int:event_id>/', views.event_detail, name='event_detail'),
+    path('weather/', weather_panel, name='weather_panel'),
+
+
 
 ]
 

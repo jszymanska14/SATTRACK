@@ -1,0 +1,104 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel pogodowy – FindYourSatellite</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        nav {
+            background-color: #f5f5f5;
+            padding: 10px;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        nav a {
+            margin-right: 15px;
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+        }
+
+        form {
+            margin-bottom: 30px;
+        }
+
+        input[type="text"] {
+            padding: 8px;
+            width: 250px;
+            max-width: 100%;
+            margin-right: 10px;
+        }
+
+        button {
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+
+        .forecast {
+            margin-top: 30px;
+        }
+
+        .forecast-day {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a href="{% url 'home' %}">Strona główna</a>
+    <a href="{% url 'weather_panel' %}">Panel pogodowy</a>
+
+   <a href="{% url 'sign_in' %}">Zaloguj się</a>
+</nav>
+
+<h1>Panel pogodowy</h1>
+
+<form method="get">
+    <label for="location">Wpisz lokalizację (miasto lub współrzędne):</label><br>
+    <input type="text" id="location" name="location" placeholder="np. Warszawa" value="{{ request.GET.location }}">
+    <button type="submit">Pokaż pogodę</button>
+</form>
+
+{% if error %}
+    <p class="error">{{ error }}</p>
+{% endif %}
+
+{% if forecast_days %}
+    <div class="forecast">
+        <h2>Pogoda dla: {{ location.name }}, {{ location.country }}</h2>
+        <p><strong>Aktualna temperatura:</strong> {{ current.temp_c }}°C</p>
+        <p><strong>Warunki:</strong> {{ current.condition.text }}</p>
+        <p><strong>Wilgotność:</strong> {{ current.humidity }}%</p>
+        <p><strong>Wiatr:</strong> {{ current.wind_kph }} km/h</p>
+
+        <h3>Prognoza na 3 dni:</h3>
+        {% for day in forecast_days %}
+            <div class="forecast-day">
+                <h4>{{ day.date }}</h4>
+                <p><strong>Warunki:</strong> {{ day.day.condition.text }}</p>
+                <p>Temperatura: {{ day.day.avgtemp_c }}°C</p>
+                <p>Min: {{ day.day.mintemp_c }}°C / Max: {{ day.day.maxtemp_c }}°C</p>
+                <p>Opady: {{ day.day.totalprecip_mm }} mm</p>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+</body>
+</html>
