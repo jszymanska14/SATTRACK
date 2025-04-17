@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Twoje dane</title>
+</head>
+<body>
+    <h1>Dane</h1>
+    <p><strong>Data i godzina:</strong> {{ event.timestamp }}</p>
+    <p><strong>Obszar (GeoJSON):</strong> {{ event.area_geojson }}</p>
+    <a href="{% url 'home' %}">Wróć</a>
+</body>
+</html>

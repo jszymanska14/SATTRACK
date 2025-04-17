@@ -4,21 +4,123 @@
 <head>
     <meta charset="UTF-8">
     <title>FindYourSatellite</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <style>
+        #map {
+            height: 500px;
+            margin-top: 20px;
+        }
+        form {
+            margin-top: 20px;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+        }
+        input[type="datetime-local"] {
+            padding: 5px;
+            margin-bottom: 10px;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
 </head>
 <body>
+
+<!-- Logowanie / Rejestracja -->
 <div id="registration-button">
     <button>zarejestruj się</button>
 </div>
-
 <div id="sign-in-button">
     <button>zaloguj się</button>
 </div>
+
+
 {% if request.session.user_id %}
 <form method="post" action="{% url 'logout' %}">
     {% csrf_token %}
     <button type="submit">Wyloguj się</button>
 </form>
 {% endif %}
-    <script src="{% static 'js/home.js' %}"></script>
+
+
+<form method="post">
+    {% csrf_token %}
+
+    <label for="{{ form.timestamp.id_for_label }}">Wybierz termin (data + godzina):</label>
+    {{ form.timestamp }}
+
+    {{ form.area_geojson }}
+
+    <button type="submit" id="save-btn" disabled>Zapisz</button>
+</form>
+
+
+<div id="map"></div>
+
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+<script>
+    const map = L.map('map').setView([20, 0], 2);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data © OpenStreetMap contributors',
+        maxZoom: 18,
+    }).addTo(map);
+
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+        edit: {
+            featureGroup: drawnItems
+        },
+        draw: {
+            polygon: true,
+            rectangle: true,
+            circle: false,
+            polyline: false,
+            marker: false,
+            circlemarker: false
+        }
+    });
+    map.addControl(drawControl);
+
+    // obsługa zaznaczenia na mapie
+    map.on(L.Draw.Event.CREATED, function (e) {
+        drawnItems.clearLayers();
+        const layer = e.layer;
+        drawnItems.addLayer(layer);
+        const geojson = layer.toGeoJSON();
+        document.getElementById("id_area_geojson").value = JSON.stringify(geojson);
+        checkFormReady();
+    });
+
+
+    const datetimeInput = document.getElementById("id_timestamp");
+    const saveBtn = document.getElementById("save-btn");
+
+    datetimeInput.addEventListener("input", checkFormReady);
+
+    function checkFormReady() {
+        const dateFilled = datetimeInput.value.trim() !== "";
+        const geoFilled = document.getElementById("id_area_geojson").value.trim() !== "";
+        saveBtn.disabled = !(dateFilled && geoFilled);
+    }
+
+    document.getElementById("registration-button").addEventListener("click", function() {
+        window.location.href = "{% url 'register' %}";
+    });
+
+    document.getElementById("sign-in-button").addEventListener("click", function() {
+        window.location.href = "{% url 'sign_in' %}";
+    });
+</script>
+
 </body>
 </html>

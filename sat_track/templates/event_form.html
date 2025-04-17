@@ -1,0 +1,62 @@
+<!-- templates/event_form.html -->
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Dodaj wydarzenie</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
+  <style>
+    #map { height: 400px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Dodaj wydarzenie</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.timestamp.label_tag }}<br>
+    {{ form.timestamp }}<br><br>
+
+    {{ form.area_geojson }}
+
+    <div id="map"></div>
+
+    <br><button type="submit">Zapisz</button>
+  </form>
+
+  <script>
+    const map = L.map('map').setView([52.237049, 21.017532], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18
+    }).addTo(map);
+
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+      draw: {
+        polygon: true,
+        polyline: false,
+        circle: false,
+        rectangle: true,
+        marker: false,
+        circlemarker: false
+      },
+      edit: {
+        featureGroup: drawnItems
+      }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+      drawnItems.clearLayers();
+      drawnItems.addLayer(e.layer);
+
+      const geojson = e.layer.toGeoJSON();
+      document.getElementById("id_area_geojson").value = JSON.stringify(geojson);
+    });
+  </script>
+</body>
+</html>

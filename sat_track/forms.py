@@ -1,15 +1,20 @@
 from django import forms
-from django.utils.timezone import now
+from .models import Event
+from datetime import datetime
 
-class SatelliteForm(forms.Form):
-    date = forms.DateField(
-        widget=forms.DateInput(attrs={'type': 'date'}),
-        label='Date'
-    )
-    time = forms.TimeField(
-        widget=forms.TimeInput(attrs={'type': 'time'}),
-        label='Time'
-    )
-    longitude = forms.FloatField(label='Longitude')
+from django import forms
+from .models import Event
+
+class EventForm(forms.ModelForm):
+    class Meta:
+        model = Event
+        fields = ['timestamp', 'area_geojson']
+        widgets = {
+            'timestamp': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
+            'area_geojson': forms.HiddenInput(),
+        }
+
+
+
 
 

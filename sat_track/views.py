@@ -7,17 +7,28 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views import View
 from django.views.generic import CreateView
-from .forms import SatelliteForm
+from .forms import EventForm
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
 
 
 
-from sat_track.models import UserAccountModel
+from sat_track.models import UserAccountModel, Event
 
 
 def home(request):
-    return render(request, 'home.html')
+    if request.method == 'POST':
+        form = EventForm(request.POST)
+        if form.is_valid():
+            event = form.save()
+            return redirect('event_detail', event_id=event.id)
+    else:
+        form = EventForm()
+    return render(request, 'home.html', {'form': form})
+
+def event_detail(request, event_id):
+    event = Event.objects.get(pk=event_id)
+    return render(request, 'event_detail.html', {'event': event})
 
 #TODO dać to gdzieś sensownie pewnie do klasy USER?
 def user_profile(request):
@@ -28,15 +39,6 @@ def user_logout(request):
     return redirect('home')  # or 'home' if you'd prefer
 
 
-def satellite_input_view(request):
-    if request.method == 'POST':
-        form = SatelliteForm(request.POST)
-        if form.is_valid():
-            data = form.cleaned_data
-            return render(request, 'result.html', {'data': data})
-    else:
-        form = SatelliteForm()
-    return render(request, 'form.html', {'form': form})
 
 
 # class RegistrationView(CreateView):
@@ -130,3 +132,13 @@ class SignInView(View):
     def get(self, request):
         # Just render the HTML page for non-AJAX GET requests
         return render(request, 'sign_in.html')
+
+    def create_event(request):
+        if request.method == 'POST':
+            form = EventForm(request.POST)
+            if form.is_valid():
+                form.save()
+                return redirect('success')
+        else:
+            form = EventForm()
+        return render(request, 'event_form.html', {'form': form})

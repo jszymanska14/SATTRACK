@@ -18,9 +18,15 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
+from sat_track import views
+from sat_track.views import RegistrationView, SignInView, user_profile
+
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('sat_track.urls')),  # to wystarczy!
+    path('', include('sat_track.urls')),path('register/', RegistrationView.as_view(), name='register'),
+    path('login/', SignInView.as_view(), name='login'),
+    path('profile/', user_profile, name='profile'),
+    path('event/<int:event_id>/', views.event_detail, name='event_detail'),
 
 ]
 
