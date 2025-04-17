@@ -1,7 +1,6 @@
 import json
 from datetime import datetime
 from turtle import shape
-
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.views import LoginView
@@ -12,10 +11,7 @@ from django.views.generic import CreateView
 from .forms import EventForm
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
-from django.contrib.sites import requests
-
-
-
+import requests
 from sat_track.models import UserAccountModel, Event
 
 
@@ -156,8 +152,8 @@ def weather_panel(request):
             "error": "Podaj lokalizację, aby wyświetlić pogodę."
         })
 
-    api_key = "0ddb12030aa8441484a95953251704"
-    url = f"https://api.weatherapi.com/v1/forecast.json?key={api_key}&q={location_query}&days=3&lang=pl"
+    api_key = "iqWBF2TJSu11rIMgOtHKgmoa24I3XiIg"
+    url = f'https://api.tomorrow.io/v4/weather/forecast?location=42.3478,-71.0466&apikey=iqWBF2TJSu11rIMgOtHKgmoa24I3XiIg&units=metric'
 
     try:
         response = requests.get(url, timeout=5)
