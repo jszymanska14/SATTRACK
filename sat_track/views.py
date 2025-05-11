@@ -152,8 +152,8 @@ def weather_panel(request):
             "error": "Podaj lokalizację, aby wyświetlić pogodę."
         })
 
-    api_key = "iqWBF2TJSu11rIMgOtHKgmoa24I3XiIg"
-    url = f'https://api.tomorrow.io/v4/weather/forecast?location=42.3478,-71.0466&apikey=iqWBF2TJSu11rIMgOtHKgmoa24I3XiIg&units=metric'
+    api_key = "0ddb12030aa8441484a95953251704"
+    url = f"http://api.weatherapi.com/v1/forecast.json?key={api_key}&q={location_query}&days=3&aqi=no&alerts=no"
 
     try:
         response = requests.get(url, timeout=5)
