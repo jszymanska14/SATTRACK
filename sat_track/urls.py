@@ -10,5 +10,7 @@ urlpatterns = [
     path('profile/', views.user_profile, name='profile'),
     path('logout/', user_logout, name='logout'),
     path('weather/', weather_panel, name='weather_panel'),
+    path('sentinel2/check/<int:event_id>/', views.sentinel2_over_bbox, name='sentinel2_check'),
+    path("event/<int:event_id>/", views.sentinel2_over_bbox, name="event_detail"),
 
 ]

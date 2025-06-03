@@ -13,13 +13,23 @@ from django.urls import reverse_lazy
 from django.shortcuts import redirect
 import requests
 from sat_track.models import UserAccountModel, Event
+from django.http import JsonResponse
+from sat_track.models import Event
+from django.http import JsonResponse
+from sat_track.models import Event
+from django.utils import timezone
+from skyfield.api import utc
 
 
 def home(request):
     if request.method == 'POST':
         form = EventForm(request.POST)
         if form.is_valid():
-            event = form.save()
+            event = form.save(commit=False)
+
+            event.timestamp = timezone.make_aware(event.timestamp)
+
+            event.save()
             return redirect('event_detail', event_id=event.id)
     else:
         form = EventForm()
@@ -38,31 +48,6 @@ def user_logout(request):
     return redirect('home')  # or 'home' if you'd prefer
 
 
-
-
-# class RegistrationView(CreateView):
-#     model = UserAccountModel  # Your model for the user, change if necessary
-#     template_name = 'registration.html'  # The template to render
-#     success_url = reverse_lazy('profile')  # Redirect to /profile/
-#     fields = ['email', 'password']
-#
-#     def form_valid(self, form):
-#         email = form.cleaned_data.get('email')
-#         password = form.cleaned_data.get('password')
-#
-#         if UserAccountModel.objects.filter(email=email).exists():
-#             form.add_error('email', 'Ten e-mail jest już zarejestrowany. Proszę użyj innego adresu.')
-#             return self.form_invalid(form)
-#
-#         # Hash password and create user manually
-#         hashed_password = make_password(password)
-#         self.object = UserAccountModel(email=email, password=hashed_password)
-#         self.object.save()
-#
-#         return JsonResponse({
-#             'status': 'success',
-#             'redirect_url': str(reverse_lazy('profile'))
-#         })
 
 class RegistrationView(View):
     def post(self, request):
@@ -173,3 +158,123 @@ def weather_panel(request):
     }
 
     return render(request, "weather_panel.html", context)
+
+
+# sat_track/apis/skyfield_orbit.py
+from datetime import datetime, timedelta
+from skyfield.api import load, EarthSatellite
+import pytz
+from sat_track.apis import N2YOTLEFetcher
+from shapely.geometry import shape, Point
+from shapely.ops import transform
+import pyproj
+
+
+class SatelliteTrajectoryCalculator:
+    def __init__(self, sat_id):
+        self.sat_id = sat_id
+        self.ts = load.timescale()
+
+    def propagate_trajectory(self, days=14, step_minutes=1):
+        tle_data = N2YOTLEFetcher(self.sat_id).fetch_tle()
+
+        if "error" in tle_data:
+            return {"error": tle_data["error"]}
+
+        satellite = EarthSatellite(tle_data["line1"], tle_data["line2"], tle_data["satname"])
+
+        # Startowy czas z UTC
+        start = datetime.utcnow().replace(tzinfo=utc)
+        step_range = [start + timedelta(minutes=m) for m in range(0, days * 24 * 60, step_minutes)]
+        times = self.ts.utc(step_range)
+
+        # Oblicz trajektorię
+        geocentric = satellite.at(times)
+        subpoints = geocentric.subpoint()
+
+        # Zbierz wyniki
+        results = []
+        for i, time in enumerate(step_range):
+            longitude = subpoints.longitude.degrees[i]
+            if longitude < 0:
+                longitude += 360
+
+            results.append({
+                "timestamp": time.isoformat(),
+                "latitude": subpoints.latitude.degrees[i],
+                "longitude": longitude,
+                "altitude_km": subpoints.elevation.km[i]
+            })
+
+        return {
+            "satellite": tle_data["satname"],
+            "sat_id": self.sat_id,
+            "positions": results
+        }
+
+    def filter_over_bbox(self, positions, geojson_str, footprint_km=145):
+        try:
+            geojson_obj = json.loads(geojson_str)
+            polygon = shape(geojson_obj["geometry"])
+        except Exception as e:
+            return {
+                "error": f"Błąd odczytu GeoJSON: {e}",
+                "positions_over_area": []
+            }
+
+        # Konwersja do układu metrycznego (Web Mercator)
+        wgs84 = pyproj.CRS("EPSG:4326")
+        metric = pyproj.CRS("EPSG:3857")
+        to_meters = pyproj.Transformer.from_crs(wgs84, metric, always_xy=True).transform
+
+        # Przekształć polygon do układu metrycznego
+        polygon_m = transform(to_meters, polygon)
+
+        filtered_positions = []
+
+        for p in positions:
+            # Punkt w WGS84
+            pt = Point(p["longitude"], p["latitude"])
+            # Punkt satelity w metrach
+            pt_m = transform(to_meters, pt)
+            # Oblicz odległość między punktem a polygonem
+            distance = pt_m.distance(polygon_m)  # w metrach
+
+            if distance <= footprint_km * 1000:
+                filtered_positions.append(p)
+
+        return {
+            "positions_over_area": filtered_positions,
+            "count": len(filtered_positions)
+        }
+
+
+from django.shortcuts import render
+from django.http import JsonResponse
+from sat_track.models import Event
+
+def sentinel2_over_bbox(request, event_id):
+    try:
+        event = Event.objects.get(pk=event_id)
+    except Event.DoesNotExist:
+        return JsonResponse({'error': 'Nie znaleziono wydarzenia'}, status=404)
+
+    sentinel_id = 40697  # Sentinel-2A
+    calculator = SatelliteTrajectoryCalculator(sentinel_id)
+
+    trajectory = calculator.propagate_trajectory(days=30)
+
+    if "error" in trajectory:
+        return render(request, "event_detail.html", {
+            "event": event,
+            "error": trajectory["error"]
+        })
+
+    filtered = calculator.filter_over_bbox(trajectory["positions"], event.area_geojson)
+
+    return render(request, "event_detail.html", {
+        "event": event,
+        "trajectory": trajectory,
+        "overpasses": filtered["positions_over_area"],
+        "overpasses_count": filtered["count"]
+    })

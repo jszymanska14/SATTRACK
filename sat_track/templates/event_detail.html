@@ -9,5 +9,54 @@
     <p><strong>Data i godzina:</strong> {{ event.timestamp }}</p>
     <p><strong>Obszar (GeoJSON):</strong> {{ event.area_geojson }}</p>
     <a href="{% url 'home' %}">Wróć</a>
+
+    <h2>Trajektoria satelity: {{ trajectory.satellite }}</h2>
+
+{% if trajectory.error %}
+  <p style="color: red;">{{ trajectory.error }}</p>
+{% else %}
+  <p><strong>Liczba pozycji:</strong> {{ trajectory.positions|length }}</p>
+
+  <table border="1" cellpadding="5" cellspacing="0">
+    <thead>
+      <tr>
+        <th>Czas (UTC)</th>
+        <th>Szerokość (lat)</th>
+        <th>Długość (lon)</th>
+        <th>Wysokość [km]</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for pos in trajectory.positions|slice:":20" %}
+{#        {% for pos in trajectory.positions|slice:"-20:" %}#}
+
+        <tr>
+          <td>{{ pos.timestamp }}</td>
+          <td>{{ pos.latitude|floatformat:4 }}</td>
+          <td>{{ pos.longitude|floatformat:4 }}</td>
+          <td>{{ pos.altitude_km|floatformat:2 }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p>Wyświetlono 20 pierwszych pozycji z {{ trajectory.positions|length }}.</p>
+{% endif %}
+
+
+<h3>Przeloty nad Twoim obszarem</h3>
+
+{% if overpasses_count %}
+  <p>Znaleziono {{ overpasses_count }} punktów przelotu satelity nad zaznaczonym obszarem:</p>
+  <ul>
+    {% for p in overpasses %}
+      <li>{{ p.timestamp }} | Lat: {{ p.latitude|floatformat:4 }} | Lon: {{ p.longitude|floatformat:4 }}</li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>Brak przelotów nad Twoim obszarem w ciągu 14 dni.</p>
+{% endif %}
+
+
 </body>
 </html>
