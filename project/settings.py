@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -18,7 +19,13 @@ SECRET_KEY = 'django-insecure-y_ryy8is6@jk4z+lh90+-j0t(k91+7-6zzeketiz1rpf512$b=
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# Hosts: lokalnie localhost; na Renderze — *.onrender.com + opcjonalnie ALLOWED_HOSTS z panelu
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+if os.environ.get('RENDER'):
+    ALLOWED_HOSTS.append('.onrender.com')
+_extra = os.environ.get('ALLOWED_HOSTS', '').strip()
+if _extra:
+    ALLOWED_HOSTS.extend(h.strip() for h in _extra.split(',') if h.strip())
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -82,3 +89,4 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
