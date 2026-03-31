@@ -416,9 +416,7 @@ def analyze_satellite_weather_match(overpasses, area_geojson):
     return analyzed_passes
 
 
-# ---------------------------------------------------------------------------
-# SATELLITE TRAJECTORY CALCULATOR  (TLE via N2YO + Skyfield propagation)
-# ---------------------------------------------------------------------------
+
 
 from skyfield.api import load, EarthSatellite
 import pytz
