@@ -15,6 +15,12 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+try:
+    import whitenoise  # noqa: F401
+    _WHITENOISE = True
+except ImportError:
+    _WHITENOISE = False
+
 SECRET_KEY = 'django-insecure-y_ryy8is6@jk4z+lh90+-j0t(k91+7-6zzeketiz1rpf512$b='
 
 DEBUG = True
@@ -39,6 +45,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+]
+if _WHITENOISE:
+    MIDDLEWARE.append('whitenoise.middleware.WhiteNoiseMiddleware')
+MIDDLEWARE += [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -87,6 +97,17 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+# Katalog docelowy dla `collectstatic` (Render / produkcja) — WhiteNoise serwuje stąd
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+if _WHITENOISE:
+    STORAGES = {
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+        },
+    }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
