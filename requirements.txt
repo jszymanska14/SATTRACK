@@ -1,0 +1,13 @@
+# Django
+Django>=5.1,<6
+
+# Production (e.g. Render)
+gunicorn>=22.0
+whitenoise>=6.6
+
+# App dependencies (sat_track)
+requests>=2.31
+skyfield>=1.46
+pytz
+shapely>=2.0
+pyproj>=3.6
