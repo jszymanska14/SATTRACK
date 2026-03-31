@@ -1,34 +1,143 @@
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>FindYourSatellite</title>
 
-</head>
-<body>
-<div><p>utwórz swoje konto do śledzenia satelit</p></div>
-<form method="post" action="{% url 'register' %}">
-        {% csrf_token %}
-    <label for="email">e-mail:</label><br>
-    <input id="email" name="email" placeholder="e-mail"><br><br>
-    <div id="email-error" class="error-placeholder">
-        {% if form.email.errors %}
-            {{ form.email.errors.0 }}
-        {% endif %}
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <i class="fas fa-rocket"></i>
+            <h1>Join SATTRACK</h1>
+            <p>Create your account and start tracking satellites</p>
+        </div>
+
+        <form method="post" action="{% url 'register' %}" id="registerForm">
+            {% csrf_token %}
+
+            <div class="form-group">
+                <label class="form-label" for="username">Username</label>
+                <input id="username" name="username" type="text" class="form-control" placeholder="Choose a username" autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="email">Email Address</label>
+                <input id="email" name="email" type="email" class="form-control" placeholder="your@email.com" autocomplete="email">
+                <div id="email-error" class="form-error"></div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">
+                    Password
+                    <span style="font-weight:400; color: var(--text-muted);"> (min 5 chars, 1 letter, 1 digit)</span>
+                </label>
+                <input id="password" name="password" type="password" class="form-control" placeholder="Create a password" autocomplete="new-password">
+                <div id="password-error" class="form-error"></div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="confirm-password">Confirm Password</label>
+                <input id="confirm-password" name="confirm-password" type="password" class="form-control" placeholder="Repeat your password" autocomplete="new-password">
+                <div id="confirm-password-error" class="form-error"></div>
+            </div>
+
+            <div id="submit-error" class="form-error" style="margin-bottom: 16px;"></div>
+
+            <button id="submit-button" type="button" class="btn btn-primary btn-block btn-lg">
+                <i class="fas fa-user-plus"></i> Create Account
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            Already have an account? <a href="{% url 'sign_in' %}">Sign in here</a>
+        </div>
     </div>
-    <label for="password">hasło: (co najmniej: 5 znaków, 1 litera, 1 cyfra)</label><br>
-    <input id="password" name="password" type="password" placeholder="hasło"><br><br>
-    <div id="password-error" class="error-placeholder"></div>
+</div>
+{% endblock %}
 
-    <label for="confirm-password">powtórz hasło:</label><br>
-    <input id="confirm-password" name="confirm-password" type="password" placeholder="powtórz hasło"><br><br>
-    <div id="confirm-password-error" class="error-placeholder"></div>
+{% block extra_scripts %}
+<script>
+function getCookie(name) {
+    let v = null;
+    if (document.cookie && document.cookie !== "") {
+        for (let c of document.cookie.split(";")) {
+            c = c.trim();
+            if (c.startsWith(name + "=")) { v = decodeURIComponent(c.slice(name.length + 1)); break; }
+        }
+    }
+    return v;
+}
 
-    <div id="submit-error" class="error-placeholder"></div>
-    <input id="submit-button" type="button" value="zapisz się">
-</form>
-    <script type="module" src="{% static 'js/registration.js' %}"></script>
+function validateEmail(val) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val) && val.length <= 65;
+}
 
-</body>
-</html>
+function validatePassword(val) {
+    return val.length >= 5 && val.length <= 30 && /[a-zA-Z]/.test(val) && /\d/.test(val);
+}
+
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const confirmInput = document.getElementById("confirm-password");
+const usernameInput = document.getElementById("username");
+const emailError = document.getElementById("email-error");
+const passwordError = document.getElementById("password-error");
+const confirmError = document.getElementById("confirm-password-error");
+const submitError = document.getElementById("submit-error");
+let emailOk = false, passOk = false, confirmOk = false;
+
+emailInput.addEventListener("blur", function() {
+    if (!validateEmail(this.value)) { emailError.textContent = "Please enter a valid email address."; emailOk = false; }
+    else { emailError.textContent = ""; emailOk = true; }
+});
+
+passwordInput.addEventListener("blur", function() {
+    const v = this.value;
+    if (v.length < 5) { passwordError.textContent = "Password must be at least 5 characters."; passOk = false; }
+    else if (v.length > 30) { passwordError.textContent = "Password must be 30 characters or less."; passOk = false; }
+    else if (!/[a-zA-Z]/.test(v)) { passwordError.textContent = "Password must contain at least one letter."; passOk = false; }
+    else if (!/\d/.test(v)) { passwordError.textContent = "Password must contain at least one digit."; passOk = false; }
+    else { passwordError.textContent = ""; passOk = true; }
+});
+
+confirmInput.addEventListener("blur", function() {
+    if (this.value !== passwordInput.value) { confirmError.textContent = "Passwords do not match."; confirmOk = false; }
+    else { confirmError.textContent = ""; confirmOk = true; }
+});
+
+document.getElementById("submit-button").addEventListener("click", function() {
+    emailOk = validateEmail(emailInput.value);
+    passOk = validatePassword(passwordInput.value);
+    confirmOk = confirmInput.value === passwordInput.value && confirmInput.value.length > 0;
+
+    if (!emailOk) emailError.textContent = "Please enter a valid email address.";
+    if (!passOk) passwordError.textContent = "Password: min 5 chars, 1 letter, 1 digit.";
+    if (!confirmOk) confirmError.textContent = "Passwords do not match.";
+
+    if (emailOk && passOk && confirmOk) {
+        submitError.textContent = "";
+        fetch("/register/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
+            body: JSON.stringify({
+                email: emailInput.value,
+                username: usernameInput.value,
+                password: passwordInput.value,
+                confirm_password: confirmInput.value
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === "success") window.location.href = data.redirect_url;
+            else if (data.field === "email") emailError.textContent = data.message;
+            else if (data.field === "password") passwordError.textContent = data.message;
+            else submitError.textContent = data.message;
+        })
+        .catch(() => { submitError.textContent = "Connection error. Please try again."; });
+    } else {
+        submitError.textContent = "Please fill in all fields correctly.";
+    }
+});
+
+</script>
+{% endblock %}

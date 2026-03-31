@@ -1,104 +1,119 @@
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-    <meta charset="UTF-8">
-    <title>Panel pogodowy – FindYourSatellite</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
 
-        nav {
-            background-color: #f5f5f5;
-            padding: 10px;
-            margin-bottom: 30px;
-            border-bottom: 1px solid #ddd;
-        }
+{% block title %}Weather Panel{% endblock %}
 
-        nav a {
-            margin-right: 15px;
-            text-decoration: none;
-            color: #333;
-            font-weight: bold;
-        }
+{% block content %}
+<h1 class="page-title">Weather Panel</h1>
+<p class="page-subtitle">
+    Check current weather conditions and 3-day forecasts for your observation location.
+</p>
 
-        form {
-            margin-bottom: 30px;
-        }
-
-        input[type="text"] {
-            padding: 8px;
-            width: 250px;
-            max-width: 100%;
-            margin-right: 10px;
-        }
-
-        button {
-            padding: 8px 16px;
-            cursor: pointer;
-        }
-
-        .forecast {
-            margin-top: 30px;
-        }
-
-        .forecast-day {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            background-color: #f9f9f9;
-        }
-
-        .error {
-            color: red;
-            font-weight: bold;
-        }
-    </style>
-</head>
-<body>
-
-<nav>
-    <a href="{% url 'home' %}">Strona główna</a>
-    <a href="{% url 'weather_panel' %}">Panel pogodowy</a>
-
-   <a href="{% url 'sign_in' %}">Zaloguj się</a>
-</nav>
-
-<h1>Panel pogodowy</h1>
-
-<form method="get">
-    <label for="location">Wpisz lokalizację (miasto lub współrzędne):</label><br>
-    <input type="text" id="location" name="location" placeholder="np. Warszawa" value="{{ request.GET.location }}">
-    <button type="submit">Pokaż pogodę</button>
-</form>
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-search-location"></i>
+        <h2>Search Location</h2>
+    </div>
+    <form method="get" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <div class="form-group" style="flex: 1; min-width: 250px; margin-bottom: 0;">
+            <label class="form-label" for="location">
+                <i class="fas fa-map-marker-alt"></i> City name or coordinates
+            </label>
+            <input type="text" id="location" name="location" class="form-control"
+                   placeholder="e.g. Krakow, 50.06,19.94"
+                   value="{{ request.GET.location }}">
+        </div>
+        <button type="submit" class="btn btn-primary" style="height: 44px;">
+            <i class="fas fa-cloud-sun"></i> Get Weather
+        </button>
+    </form>
+</div>
 
 {% if error %}
-    <p class="error">{{ error }}</p>
+<div class="card" style="border-left: 3px solid var(--warning);">
+    <p style="color: var(--warning);"><i class="fas fa-exclamation-triangle"></i> {{ error }}</p>
+</div>
+{% elif not current and not forecast_days %}
+<div class="card" style="text-align: center; padding: 40px;">
+    <i class="fas fa-cloud-sun" style="font-size: 3rem; color: var(--text-muted); opacity: 0.4; margin-bottom: 16px; display: block;"></i>
+    <p style="color: var(--text-secondary); font-size: 1rem;">Enter a city name or coordinates above to check the weather forecast and observation conditions.</p>
+</div>
+{% endif %}
+
+{% if current %}
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-thermometer-half"></i>
+        <h2>Current Weather — {{ location.name }}, {{ location.country }}</h2>
+    </div>
+
+    <div class="stats-bar">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-temperature-high"></i></div>
+            <div class="stat-number">{{ current.temp_c }}°C</div>
+            <div class="stat-label">Temperature</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-tint"></i></div>
+            <div class="stat-number">{{ current.humidity }}%</div>
+            <div class="stat-label">Humidity</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-wind"></i></div>
+            <div class="stat-number">{{ current.wind_kph }}</div>
+            <div class="stat-label">Wind (km/h)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-eye"></i></div>
+            <div class="stat-number">{{ current.vis_km }}</div>
+            <div class="stat-label">Visibility (km)</div>
+        </div>
+    </div>
+
+    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 12px;">
+        <i class="fas fa-cloud"></i> <strong>Conditions:</strong> {{ current.condition.text }}
+    </p>
+</div>
 {% endif %}
 
 {% if forecast_days %}
-    <div class="forecast">
-        <h2>Pogoda dla: {{ location.name }}, {{ location.country }}</h2>
-        <p><strong>Aktualna temperatura:</strong> {{ current.temp_c }}°C</p>
-        <p><strong>Warunki:</strong> {{ current.condition.text }}</p>
-        <p><strong>Wilgotność:</strong> {{ current.humidity }}%</p>
-        <p><strong>Wiatr:</strong> {{ current.wind_kph }} km/h</p>
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-calendar-week"></i>
+        <h2>3-Day Forecast</h2>
+    </div>
 
-        <h3>Prognoza na 3 dni:</h3>
+    <div class="weather-grid">
         {% for day in forecast_days %}
-            <div class="forecast-day">
-                <h4>{{ day.date }}</h4>
-                <p><strong>Warunki:</strong> {{ day.day.condition.text }}</p>
-                <p>Temperatura: {{ day.day.avgtemp_c }}°C</p>
-                <p>Min: {{ day.day.mintemp_c }}°C / Max: {{ day.day.maxtemp_c }}°C</p>
-                <p>Opady: {{ day.day.totalprecip_mm }} mm</p>
+        <div class="weather-card">
+            <p style="color: var(--accent-cyan); font-family: 'Orbitron', monospace; font-size: 0.8rem; margin-bottom: 8px;">{{ day.date }}</p>
+            {% if day.day.condition.icon %}
+            <img src="https:{{ day.day.condition.icon }}" alt="{{ day.day.condition.text }}" style="width: 48px; height: 48px; margin-bottom: 4px;">
+            {% endif %}
+            <div class="weather-temp">{{ day.day.avgtemp_c }}°C</div>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 6px 0;">{{ day.day.condition.text }}</p>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px;">
+                <p><i class="fas fa-arrow-down" style="color: var(--accent-blue);"></i> {{ day.day.mintemp_c }}°C &nbsp;/&nbsp; <i class="fas fa-arrow-up" style="color: var(--danger);"></i> {{ day.day.maxtemp_c }}°C</p>
+                <p><i class="fas fa-cloud-rain"></i> {{ day.day.totalprecip_mm }} mm</p>
+                <p><i class="fas fa-tint"></i> Rain: {{ day.day.daily_chance_of_rain }}%</p>
             </div>
+
+            {% if day.day.daily_chance_of_rain <= 30 and day.day.avgvis_km >= 8 %}
+            <span class="badge badge-success" style="margin-top: 8px;">
+                <i class="fas fa-check"></i> Good for observation
+            </span>
+            {% elif day.day.daily_chance_of_rain <= 60 %}
+            <span class="badge badge-warning" style="margin-top: 8px;">
+                <i class="fas fa-minus"></i> Moderate
+            </span>
+            {% else %}
+            <span class="badge badge-danger" style="margin-top: 8px;">
+                <i class="fas fa-times"></i> Poor conditions
+            </span>
+            {% endif %}
+        </div>
         {% endfor %}
     </div>
+</div>
 {% endif %}
-
-</body>
-</html>
+{% endblock %}

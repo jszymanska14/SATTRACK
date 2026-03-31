@@ -1,52 +1,49 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SATTRACK</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            margin: 0;
-            background-color: #f9f9f9;
-        }
-        header {
-            background-color: #222;
-            color: white;
-            padding: 15px 30px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        nav a {
-            color: white;
-            text-decoration: none;
-            margin-right: 20px;
-            font-weight: bold;
-        }
-        .content {
-            padding: 40px;
-            max-width: 1000px;
-            margin: auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.05);
-            margin-top: 30px;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SATTRACK{% endblock %} | Satellite Tracking System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'css/space-theme.css' %}">
 </head>
 <body>
-    <header>
-        <h1>SATTRACK</h1>
-        <nav>
-            <a href="{% url 'home' %}">Home</a>
-            <a href="{% url 'satellite_input' %}">Satellite Input</a>
-            <a href="#">Weather Panel</a>
-            <a href="{% url 'login' %}">Login</a>
-        </nav>
-    </header>
 
-    <div class="content">
+    <nav class="navbar">
+        <a href="{% url 'home' %}" class="nav-brand" style="text-decoration:none;">
+            <i class="fas fa-satellite"></i>
+            <span>SATTRACK</span>
+        </a>
+        <div class="nav-links" id="navLinks">
+            <a href="{% url 'home' %}" class="nav-link"><i class="fas fa-rocket"></i> Home</a>
+            <a href="{% url 'weather_panel' %}" class="nav-link"><i class="fas fa-cloud-moon"></i> Weather</a>
+            {% if request.session.user_id %}
+                <a href="{% url 'profile' %}" class="nav-link"><i class="fas fa-user-astronaut"></i> User Panel</a>
+                <a href="{% url 'observation_calendar' %}" class="nav-link"><i class="fas fa-calendar-alt"></i> Calendar</a>
+                <a href="{% url 'logout' %}" class="nav-link logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            {% else %}
+                <a href="{% url 'sign_in' %}" class="nav-link"><i class="fas fa-sign-in-alt"></i> Sign In</a>
+                <a href="{% url 'register' %}" class="nav-link btn-glow"><i class="fas fa-user-plus"></i> Register</a>
+            {% endif %}
+        </div>
+        <button class="mobile-menu-btn" onclick="document.getElementById('navLinks').classList.toggle('active')">
+            <i class="fas fa-bars"></i>
+        </button>
+    </nav>
+
+    <main class="main-content">
         {% block content %}{% endblock %}
-    </div>
+    </main>
+
+    <footer class="footer">
+        <p><i class="fas fa-satellite-dish" style="margin-right:6px;"></i> &copy; 2026 SATTRACK &mdash; Satellite Tracking System | AGH University of Science and Technology</p>
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

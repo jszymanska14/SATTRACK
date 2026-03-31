@@ -1,62 +1,468 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Twoje dane</title>
-</head>
-<body>
-    <h1>Dane</h1>
-    <p><strong>Data i godzina:</strong> {{ event.timestamp }}</p>
-    <p><strong>Obszar (GeoJSON):</strong> {{ event.area_geojson }}</p>
-    <a href="{% url 'home' %}">Wróć</a>
+{% extends "base.html" %}
+{% load static %}
 
-    <h2>Trajektoria satelity: {{ trajectory.satellite }}</h2>
+{% block title %}Satellite Analysis{% endblock %}
 
-{% if trajectory.error %}
-  <p style="color: red;">{{ trajectory.error }}</p>
-{% else %}
-  <p><strong>Liczba pozycji:</strong> {{ trajectory.positions|length }}</p>
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+{% endblock %}
 
-  <table border="1" cellpadding="5" cellspacing="0">
-    <thead>
-      <tr>
-        <th>Czas (UTC)</th>
-        <th>Szerokość (lat)</th>
-        <th>Długość (lon)</th>
-        <th>Wysokość [km]</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for pos in trajectory.positions|slice:":20" %}
-{#        {% for pos in trajectory.positions|slice:"-20:" %}#}
+{% block content %}
+<h1 class="page-title">Optical Satellite Analysis</h1>
+<p class="page-subtitle">Pass predictions from N2YO API for optical satellites within ±3 days of your chosen date ({{ user_date }}), with weather matching.</p>
 
-        <tr>
-          <td>{{ pos.timestamp }}</td>
-          <td>{{ pos.latitude|floatformat:4 }}</td>
-          <td>{{ pos.longitude|floatformat:4 }}</td>
-          <td>{{ pos.altitude_km|floatformat:2 }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Event Info -->
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-info-circle"></i>
+        <h2>Event Information</h2>
+    </div>
+    <div class="form-row">
+        <div>
+            <p style="color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">Date &amp; Time</p>
+            <p style="font-size: 1.1rem;">{{ event.timestamp }}</p>
+        </div>
+        <div>
+            <p style="color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">Satellites Analyzed</p>
+            <p style="font-size: 1.1rem; color: var(--accent-cyan);">
+                {% for sr in satellite_results %}{{ sr.info.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </p>
+        </div>
+        <div>
+            <p style="color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">Area (GeoJSON)</p>
+            <p style="font-size: 0.85rem; word-break: break-all; color: var(--text-secondary);">{{ event.area_geojson|truncatechars:120 }}</p>
+        </div>
+    </div>
+</div>
 
-  <p>Wyświetlono 20 pierwszych pozycji z {{ trajectory.positions|length }}.</p>
-{% endif %}
-
-
-<h3>Przeloty nad Twoim obszarem</h3>
-
-{% if overpasses_count %}
-  <p>Znaleziono {{ overpasses_count }} punktów przelotu satelity nad zaznaczonym obszarem:</p>
-  <ul>
-    {% for p in overpasses %}
-      <li>{{ p.timestamp }} | Lat: {{ p.latitude|floatformat:4 }} | Lon: {{ p.longitude|floatformat:4 }}</li>
+{% if errors %}
+<div class="card" style="border-left: 3px solid var(--danger);">
+    {% for err in errors %}
+    <p style="color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> {{ err }}</p>
     {% endfor %}
-  </ul>
-{% else %}
-  <p>Brak przelotów nad Twoim obszarem w ciągu 14 dni.</p>
+</div>
 {% endif %}
 
+<!-- Recommendations -->
+{% if recommendations %}
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-star"></i>
+        <h2>Recommended Observation Windows</h2>
+    </div>
+    <p style="color: var(--text-secondary); margin-bottom: 16px;">
+        Found <strong style="color: var(--success);">{{ recommendations|length }}</strong> optimal window(s) across all optical satellites,
+        sorted by proximity to your chosen date (<strong style="color:var(--accent-cyan);">{{ user_date }}</strong>):
+    </p>
 
-</body>
-</html>
+    {% for rec in recommendations %}
+    <div class="rec-card {% if rec.weather.score >= 80 %}good{% elif rec.weather.score >= 60 %}moderate{% else %}poor{% endif %}" {% if rec.date == user_date %}style="border: 2px solid var(--success);"{% endif %}>
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+            <strong>
+                <span style="color: var(--accent-cyan);">{{ rec.satellite }}</span> &mdash; {{ rec.overpass.timestamp }} UTC
+                {% if rec.date == user_date %}<span style="background:var(--success);color:#000;padding:2px 8px;border-radius:4px;font-size:0.75rem;margin-left:6px;">EXACT DATE</span>{% endif %}
+            </strong>
+            <span class="score-pill {% if rec.weather.score >= 80 %}score-high{% elif rec.weather.score >= 60 %}score-medium{% else %}score-low{% endif %}">
+                {{ rec.weather.score }}/100
+            </span>
+        </div>
+        <p style="color: var(--text-secondary); margin-top: 6px; font-size: 0.9rem;">{{ rec.weather.description }}</p>
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">
+            <i class="fas fa-calendar-alt"></i> {{ rec.date }} &nbsp;&bull;&nbsp;
+            <i class="fas fa-map-pin"></i> Lat {{ rec.overpass.latitude|floatformat:4 }}, Lon {{ rec.overpass.longitude|floatformat:4 }}
+        </p>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- N2YO Visual Passes -->
+{% if visual_passes %}
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-eye"></i>
+        <h2>N2YO Visual Passes ({{ visual_passes_count }})</h2>
+    </div>
+    <p style="color: var(--text-secondary); margin-bottom: 12px;">
+        Predicted times when optical satellites are visible from the observation area
+        (satellite illuminated by Sun, observer in twilight/darkness). Data from <span style="color:var(--accent-cyan);">N2YO API</span>.
+    </p>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Satellite</th>
+                    <th>Start (UTC)</th>
+                    <th>Max Elev. (UTC)</th>
+                    <th>End (UTC)</th>
+                    <th>Max El.</th>
+                    <th>Direction</th>
+                    <th>Duration</th>
+                    <th>Mag</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vp in visual_passes %}
+                <tr>
+                    <td style="color:var(--accent-cyan);font-weight:600;">{{ vp.satellite }}</td>
+                    <td>{{ vp.start_dt }} <span style="color:var(--text-muted);font-size:0.8rem;">{{ vp.startAzCompass }}</span></td>
+                    <td>{{ vp.max_dt }}</td>
+                    <td>{{ vp.end_dt }} <span style="color:var(--text-muted);font-size:0.8rem;">{{ vp.endAzCompass }}</span></td>
+                    <td style="color:var(--accent-cyan);font-weight:600;">{{ vp.maxEl }}°</td>
+                    <td>{{ vp.startAzCompass }} → {{ vp.maxAzCompass }} → {{ vp.endAzCompass }}</td>
+                    <td>{{ vp.duration }}s</td>
+                    <td>{{ vp.mag|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- N2YO Radio (All) Passes -->
+{% if radio_passes %}
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-broadcast-tower"></i>
+        <h2>N2YO All Passes — above 10° ({{ radio_passes_count }})</h2>
+    </div>
+    <p style="color: var(--text-secondary); margin-bottom: 12px;">
+        All predicted passes above 10° elevation from the observation area centre.
+        Data from <span style="color:var(--accent-cyan);">N2YO API</span>.
+    </p>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Satellite</th>
+                    <th>Start (UTC)</th>
+                    <th>Max Elev. (UTC)</th>
+                    <th>End (UTC)</th>
+                    <th>Max El.</th>
+                    <th>Direction</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rp in radio_passes %}
+                <tr>
+                    <td style="color:var(--accent-cyan);font-weight:600;">{{ rp.satellite }}</td>
+                    <td>{{ rp.start_dt }} <span style="color:var(--text-muted);font-size:0.8rem;">{{ rp.startAzCompass }}</span></td>
+                    <td>{{ rp.max_dt }}</td>
+                    <td>{{ rp.end_dt }} <span style="color:var(--text-muted);font-size:0.8rem;">{{ rp.endAzCompass }}</span></td>
+                    <td style="color:var(--accent-cyan);font-weight:600;">{{ rp.maxEl }}°</td>
+                    <td>{{ rp.startAzCompass }} → {{ rp.maxAzCompass }} → {{ rp.endAzCompass }}</td>
+                    <td>{{ rp.duration }}s</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Summary Stats -->
+<div class="stats-bar">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-satellite"></i></div>
+        <div class="stat-number">{{ satellite_results|length }}</div>
+        <div class="stat-label">Satellites</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-satellite-dish"></i></div>
+        <div class="stat-number">{{ overpasses_count|default:"0" }}</div>
+        <div class="stat-label">Ground-track Overpasses</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-eye"></i></div>
+        <div class="stat-number">{{ visual_passes_count|default:"0" }}</div>
+        <div class="stat-label">N2YO Visual Passes</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-broadcast-tower"></i></div>
+        <div class="stat-number">{{ radio_passes_count|default:"0" }}</div>
+        <div class="stat-label">N2YO All Passes</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+        <div class="stat-number">{{ recommendations|length|default:"0" }}</div>
+        <div class="stat-label">Recommended</div>
+    </div>
+</div>
+
+<!-- Satellite Flyover Map -->
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-map-marked-alt"></i>
+        <h2>Satellite Flyover Map</h2>
+    </div>
+    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">
+        <i class="fas fa-mouse-pointer"></i> Hover over markers to see satellite, flyover date and time. Click for full details.
+    </p>
+    <div class="map-container">
+        <div id="map"></div>
+    </div>
+</div>
+
+<!-- Per-satellite trajectory info -->
+{% for sr in satellite_results %}
+{% if sr.trajectory and not sr.trajectory.error %}
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-table"></i>
+        <h2>Trajectory: {{ sr.info.name }} <span style="font-size:0.75rem;color:var(--text-muted);">(NORAD {{ sr.info.norad_id }}, swath {{ sr.info.swath_km }} km)</span></h2>
+    </div>
+    <p style="color: var(--text-secondary); margin-bottom: 8px;">
+        {{ sr.overpasses_count }} ground-track overpass(es) detected.
+        Showing first 10 of {{ sr.trajectory.positions|length }} trajectory points.
+    </p>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Time (UTC)</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                    <th>Altitude (km)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pos in sr.trajectory.positions|slice:":10" %}
+                <tr>
+                    <td>{{ pos.timestamp }}</td>
+                    <td>{{ pos.latitude|floatformat:4 }}°</td>
+                    <td>{{ pos.longitude|floatformat:4 }}°</td>
+                    <td>{{ pos.altitude_km|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<!-- Detailed Pass Analysis -->
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-search-location"></i>
+        <h2>Detailed Pass Analysis — All Optical Satellites</h2>
+    </div>
+
+    {% if passes_by_date %}
+        {% for date, passes in passes_by_date.items %}
+        <h3 style="color: var(--accent-cyan); font-family: 'Orbitron', monospace; font-size: 0.9rem; margin: 20px 0 10px; letter-spacing: 1px;">
+            <i class="fas fa-calendar-day"></i> {{ date }}
+        </h3>
+        {% for analysis in passes %}
+        <div class="pass-item">
+            <div class="pass-header">
+                <strong><i class="fas fa-satellite"></i> {{ analysis.satellite|default:"Satellite" }} &mdash; <i class="fas fa-clock"></i> {{ analysis.overpass.timestamp }} UTC</strong>
+                <span class="score-pill {% if analysis.weather.score >= 80 %}score-high{% elif analysis.weather.score >= 60 %}score-medium{% else %}score-low{% endif %}">
+                    {{ analysis.weather.score }}/100
+                </span>
+            </div>
+
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 8px;">
+                <strong>Position:</strong> {{ analysis.overpass.latitude|floatformat:4 }}°N, {{ analysis.overpass.longitude|floatformat:4 }}°E &nbsp;&bull;&nbsp;
+                <strong>Altitude:</strong> {{ analysis.overpass.altitude_km|floatformat:2 }} km
+            </p>
+
+            <div class="weather-details">
+                <strong>Weather Analysis:</strong> {{ analysis.weather.description }}
+                {% if analysis.weather.details %}
+                <ul>
+                    <li>Visibility: {{ analysis.weather.details.visibility_km }} km</li>
+                    <li>Rain probability: {{ analysis.weather.details.rain_chance }}%</li>
+                    <li>Wind speed: {{ analysis.weather.details.wind_speed_kph }} km/h</li>
+                </ul>
+                {% endif %}
+            </div>
+
+            {% if analysis.recommendation %}
+            <p style="color: var(--success); font-weight: 600; margin-top: 8px;">
+                <i class="fas fa-check-circle"></i> Recommended for observation
+            </p>
+            {% else %}
+            <p style="color: var(--warning); margin-top: 8px;">
+                <i class="fas fa-exclamation-circle"></i> Sub-optimal observation window
+            </p>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-satellite"></i>
+            <h3>No overpasses detected</h3>
+            <p>No satellite overpasses found over your area within the 30-day analysis window.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+    var map = L.map('map').setView([52.2297, 21.0122], 6);
+
+    var standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(map);
+
+    var satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri'
+    });
+
+    var darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO'
+    });
+
+    L.control.layers({
+        "Standard": standardLayer,
+        "Satellite": satelliteLayer,
+        "Dark": darkLayer
+    }).addTo(map);
+
+    // GeoJSON area
+    {% if area_geojson %}
+    try {
+        var areaData = {{ area_geojson|safe }};
+        var areaLayer = L.geoJSON(areaData, {
+            style: {
+                color: '#e63946',
+                weight: 3,
+                fillColor: '#e63946',
+                fillOpacity: 0.12,
+                dashArray: '5, 8'
+            }
+        }).addTo(map);
+        map.fitBounds(areaLayer.getBounds());
+        areaLayer.bindPopup("<strong>Research Area</strong>");
+    } catch(e) {
+        console.error('GeoJSON parse error:', e);
+    }
+    {% endif %}
+
+    // Overpass markers
+    {% if overpasses %}
+    var overpassCoords = [];
+    {% for pass in overpasses %}
+    (function() {
+        var marker = L.circleMarker([{{ pass.latitude }}, {{ pass.longitude }}], {
+            radius: 6,
+            fillColor: '#10b981',
+            color: '#059669',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+        }).addTo(map);
+
+        marker.bindTooltip(
+            '<strong>{{ pass.satellite|default:"Satellite" }}</strong><br>' +
+            '<strong>{{ pass.timestamp }}</strong><br>' +
+            'Lat: {{ pass.latitude|floatformat:4 }}°, Lon: {{ pass.longitude|floatformat:4 }}°',
+            { direction: 'top', offset: [0, -8] }
+        );
+
+        marker.bindPopup(
+            '<strong>{{ pass.satellite|default:"Satellite" }} Overpass</strong><br>' +
+            '<strong>Time:</strong> {{ pass.timestamp }}<br>' +
+            '<strong>Position:</strong> {{ pass.latitude|floatformat:4 }}°, {{ pass.longitude|floatformat:4 }}°<br>' +
+            '<strong>Altitude:</strong> {{ pass.altitude_km|floatformat:2 }} km'
+        );
+
+        overpassCoords.push([{{ pass.latitude }}, {{ pass.longitude }}]);
+    })();
+    {% endfor %}
+
+    if (overpassCoords.length > 1) {
+        L.polyline(overpassCoords, {
+            color: '#3b82f6',
+            weight: 2,
+            opacity: 0.5,
+            dashArray: '5, 10'
+        }).addTo(map);
+    }
+    {% endif %}
+
+    // Weather-analyzed markers
+    {% if analyzed_passes %}
+    {% for analysis in analyzed_passes %}
+    (function() {
+        var score = {{ analysis.weather.score }};
+        var color = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
+
+        var wm = L.circleMarker([{{ analysis.overpass.latitude }}, {{ analysis.overpass.longitude }}], {
+            radius: 9,
+            fillColor: color,
+            color: '#000',
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.85
+        }).addTo(map);
+
+        wm.bindTooltip(
+            '<strong>{{ analysis.satellite|default:"Satellite" }}</strong><br>' +
+            '<strong>{{ analysis.overpass.timestamp }}</strong><br>' +
+            'Weather score: {{ analysis.weather.score }}/100',
+            { direction: 'top', offset: [0, -10] }
+        );
+
+        wm.bindPopup(
+            '<strong>{{ analysis.satellite|default:"Satellite" }} — Pass + Weather</strong><br>' +
+            '<strong>Time:</strong> {{ analysis.overpass.timestamp }}<br>' +
+            '<strong>Position:</strong> {{ analysis.overpass.latitude|floatformat:4 }}°, {{ analysis.overpass.longitude|floatformat:4 }}°<br>' +
+            '<strong>Weather Score:</strong> {{ analysis.weather.score }}/100<br>' +
+            '<strong>Status:</strong> {{ analysis.weather.description }}<br>' +
+            {% if analysis.weather.details %}
+            '<hr style="border-color: rgba(255,255,255,0.1);">' +
+            '<strong>Weather Details:</strong><br>' +
+            '• Visibility: {{ analysis.weather.details.visibility_km }} km<br>' +
+            '• Rain: {{ analysis.weather.details.rain_chance }}%<br>' +
+            '• Wind: {{ analysis.weather.details.wind_speed_kph }} km/h' +
+            {% endif %}
+            ''
+        );
+    })();
+    {% endfor %}
+    {% endif %}
+
+    // Legend
+    var legend = L.control({position: 'bottomright'});
+    legend.onAdd = function () {
+        var div = L.DomUtil.create('div', 'info legend');
+        div.innerHTML =
+            '<h4>LEGEND</h4>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#00d4ff;opacity:0.3;display:inline-block;border-radius:2px;"></span> Research area</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#10b981;display:inline-block;border-radius:50%;"></span> Good conditions</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#f59e0b;display:inline-block;border-radius:50%;"></span> Moderate</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#ef4444;display:inline-block;border-radius:50%;"></span> Poor conditions</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:20px;height:2px;background:#3b82f6;display:inline-block;"></span> Trajectory</div>';
+        return div;
+    };
+    legend.addTo(map);
+
+    // Time control panel
+    {% if analyzed_passes %}
+    var tc = L.control({position: 'topright'});
+    tc.onAdd = function () {
+        var div = L.DomUtil.create('div', 'time-control-box');
+        div.innerHTML =
+            '<h4>ANALYSIS</h4>' +
+            '<strong>Next recommended pass:</strong><br>' +
+            {% if recommendations %}
+            '<span style="color:#10b981;">{{ recommendations.0.satellite }} — {{ recommendations.0.overpass.timestamp }} UTC</span><br>' +
+            '<span style="font-size:0.8em;">Weather: {{ recommendations.0.weather.score }}/100</span>' +
+            {% else %}
+            '<span style="color:#f59e0b;">No optimal windows found</span>' +
+            {% endif %}
+            '';
+        return div;
+    };
+    tc.addTo(map);
+    {% endif %}
+</script>
+{% endblock %}

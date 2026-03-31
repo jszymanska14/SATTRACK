@@ -3,10 +3,10 @@ export function validateEmail(emailInput, emailError) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(email)) {
-        emailError.textContent = "podaj poprawny email";
+        emailError.textContent = "Please enter a valid email address.";
         return false;
     } else if (email.length > 65) {
-        emailError.textContent = "e-mail jest za długi";
+        emailError.textContent = "Email address is too long.";
         return false;
     } else {
         emailError.textContent = "";
@@ -14,24 +14,23 @@ export function validateEmail(emailInput, emailError) {
     }
 }
 
-
 export function validatePassword(passwordInput, passwordError) {
     const password = passwordInput.value;
 
     if (password.length < 5) {
-        passwordError.textContent = "hasło musi mieć przynajmniej 5 znaków";
+        passwordError.textContent = "Password must be at least 5 characters.";
         passwordInput.value = "";
         return false;
     } else if (password.length > 30) {
-        passwordError.textContent = "hasło musi mieć nie więcej niż 30 znaków";
+        passwordError.textContent = "Password must be 30 characters or less.";
         passwordInput.value = "";
         return false;
     } else if (!/[a-zA-Z]/.test(password)) {
-        passwordError.textContent = "hasło musi mieć przynajmniej jedną literę";
+        passwordError.textContent = "Password must contain at least one letter.";
         passwordInput.value = "";
         return false;
     } else if (!/\d/.test(password)) {
-        passwordError.textContent = "hasło musi mieć przynajmniej jedną cyfrę";
+        passwordError.textContent = "Password must contain at least one digit.";
         passwordInput.value = "";
         return false;
     } else {
@@ -40,27 +39,15 @@ export function validatePassword(passwordInput, passwordError) {
     }
 }
 
-// export function handleSubmit(form, submitError, flags) {
-//
-//     if (flags.every(flag => flag === true)) {
-//         submitError.textContent = "";
-//         form.submit();
-//     } else {
-//         submitError.textContent = "uzupełnij wszystkie dane";
-//     }
-// }
-
 export function handleSubmit(form, submitError, flags, url, onSuccess, onFieldError) {
     if (flags.every(flag => flag === true)) {
         submitError.textContent = "";
-
         const data = {
             email: form.querySelector("#email").value,
             password: form.querySelector("#password").value,
-            confirm_password: form.querySelector("#confirm-password")?.value || null  // optional
-
+            confirm_password: form.querySelector("#confirm-password")?.value || null,
+            username: form.querySelector("#username")?.value || null
         };
-
         fetch(url, {
             method: "POST",
             headers: {
@@ -82,16 +69,14 @@ export function handleSubmit(form, submitError, flags, url, onSuccess, onFieldEr
             }
         })
         .catch(error => {
-            submitError.textContent = "Wystąpił błąd przy przesyłaniu danych.";
+            submitError.textContent = "An error occurred while submitting data.";
             console.error(error);
         });
-
     } else {
-        submitError.textContent = "Uzupełnij wszystkie dane";
+        submitError.textContent = "Please fill in all required fields.";
     }
 }
 
-// CSRF helper
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== "") {

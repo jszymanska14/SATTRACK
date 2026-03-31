@@ -1,16 +1,124 @@
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>FindYourSatellite</title>
-</head>
-<body>
-<h2>Witaj na swoim profilu</h2>
-<h3>tutaj będą się wyświetlac zapisane odkrycia</h3>
 
-<a href="{% url 'home' %}">
-    <button type="button">dom</button>
-</a>
-</body>
-</html>
+{% block title %}User Panel{% endblock %}
+
+{% block content %}
+<h1 class="page-title">User Panel</h1>
+<p class="page-subtitle">
+    Welcome back, <strong>{{ user.username|default:user.email }}</strong>!
+    Manage your satellite observations and track your history.
+</p>
+
+<!-- Add New Observation -->
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-plus-circle"></i>
+        <h2>Log New Observation</h2>
+    </div>
+
+    <form method="post" action="{% url 'profile' %}">
+        {% csrf_token %}
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.satellite_name.id_for_label }}">
+                    <i class="fas fa-satellite"></i> Satellite Name
+                </label>
+                {{ form.satellite_name }}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.date.id_for_label }}">
+                    <i class="fas fa-calendar-day"></i> Date
+                </label>
+                {{ form.date }}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.time.id_for_label }}">
+                    <i class="fas fa-clock"></i> Time (UTC)
+                </label>
+                {{ form.time }}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.latitude.id_for_label }}">
+                    <i class="fas fa-map-marker-alt"></i> Latitude
+                </label>
+                {{ form.latitude }}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.longitude.id_for_label }}">
+                    <i class="fas fa-map-marker-alt"></i> Longitude
+                </label>
+                {{ form.longitude }}
+            </div>
+            <div class="form-group" style="display:flex; align-items:flex-end;">
+                <button type="submit" class="btn btn-success btn-lg" style="width:100%;">
+                    <i class="fas fa-save"></i> Save Observation
+                </button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="{{ form.notes.id_for_label }}">
+                <i class="fas fa-sticky-note"></i> Notes
+            </label>
+            {{ form.notes }}
+        </div>
+    </form>
+</div>
+
+<!-- Observation History -->
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-history"></i>
+        <h2>Observation History</h2>
+    </div>
+
+    {% if observations %}
+        <div class="stats-bar" style="margin-bottom: 20px;">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-binoculars"></i></div>
+                <div class="stat-number">{{ observations|length }}</div>
+                <div class="stat-label">Total Observations</div>
+            </div>
+        </div>
+
+        {% for obs in observations %}
+        <div class="obs-item">
+            <div class="obs-icon">
+                <i class="fas fa-satellite"></i>
+            </div>
+            <div class="obs-details">
+                <h4>{{ obs.satellite_name }}</h4>
+                <div class="obs-meta">
+                    <span><i class="fas fa-calendar"></i> {{ obs.date }}</span>
+                    <span><i class="fas fa-clock"></i> {{ obs.time }} UTC</span>
+                    <span><i class="fas fa-map-pin"></i> {{ obs.latitude|floatformat:4 }}°, {{ obs.longitude|floatformat:4 }}°</span>
+                </div>
+                {% if obs.notes %}
+                <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px;">{{ obs.notes }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <a href="{% url 'delete_observation' obs.id %}" class="btn btn-danger btn-sm"
+                   onclick="return confirm('Delete this observation?');">
+                    <i class="fas fa-trash"></i>
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-telescope"></i>
+            <h3>No observations yet</h3>
+            <p>Start logging your satellite observations using the form above.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

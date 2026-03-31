@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Observation Calendar{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Observation Calendar</h1>
+<p class="page-subtitle">
+    View your satellite observations and upcoming analysis events on the calendar.
+    Good observation windows are highlighted based on satellite passes and weather conditions.
+</p>
+
+<div id="notification-area"></div>
+
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-calendar-alt"></i>
+        <h2>Calendar View</h2>
+    </div>
+    <div class="calendar-container">
+        <div id="calendar"></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-info-circle"></i>
+        <h2>Legend</h2>
+    </div>
+    <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 14px; height: 14px; border-radius: 3px; background: var(--accent-blue); display: inline-block;"></span>
+            <span style="font-size: 0.9rem; color: var(--text-secondary);">Your observations</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 14px; height: 14px; border-radius: 3px; background: var(--success); display: inline-block;"></span>
+            <span style="font-size: 0.9rem; color: var(--text-secondary);">Satellite analysis events</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 14px; height: 14px; border-radius: 3px; background: var(--warning); display: inline-block;"></span>
+            <span style="font-size: 0.9rem; color: var(--text-secondary);">Moderate visibility window</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 14px; height: 14px; border-radius: 3px; background: var(--danger); display: inline-block;"></span>
+            <span style="font-size: 0.9rem; color: var(--text-secondary);">Poor visibility conditions</span>
+        </div>
+    </div>
+</div>
+
+<!-- Event Detail Modal -->
+<div id="eventModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:2000; background:rgba(0,0,0,0.7); justify-content:center; align-items:center;">
+    <div class="card" style="max-width:480px; width:90%; margin:auto; position:relative;">
+        <button onclick="document.getElementById('eventModal').style.display='none'" class="btn btn-secondary btn-sm" style="position:absolute; top:16px; right:16px;">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="card-header">
+            <i class="fas fa-satellite"></i>
+            <h2 id="modalTitle">Observation Details</h2>
+        </div>
+        <div id="modalBody"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendar');
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,listWeek'
+        },
+        events: '/api/calendar-events/',
+        height: 'auto',
+        eventClick: function(info) {
+            info.jsEvent.preventDefault();
+            const props = info.event.extendedProps;
+
+            if (info.event.url) {
+                window.location.href = info.event.url;
+                return;
+            }
+
+            const modal = document.getElementById('eventModal');
+            document.getElementById('modalTitle').textContent = info.event.title;
+
+            let html = '<div style="color: var(--text-secondary); font-size: 0.9rem;">';
+            if (props.satellite) html += '<p><strong>Satellite:</strong> ' + props.satellite + '</p>';
+            if (props.lat) html += '<p><strong>Coordinates:</strong> ' + props.lat.toFixed(4) + '°, ' + props.lon.toFixed(4) + '°</p>';
+            html += '<p><strong>Date/Time:</strong> ' + info.event.start.toLocaleString() + '</p>';
+            if (props.notes) html += '<p><strong>Notes:</strong> ' + props.notes + '</p>';
+            html += '</div>';
+
+            document.getElementById('modalBody').innerHTML = html;
+            modal.style.display = 'flex';
+        },
+        eventDidMount: function(info) {
+            if (info.event.extendedProps.satellite) {
+                info.el.title = info.event.extendedProps.satellite + ' observation';
+            }
+        }
+    });
+
+    calendar.render();
+
+    /* Check for upcoming good observation windows and show notification */
+    fetch('/api/calendar-events/')
+        .then(r => r.json())
+        .then(events => {
+            const now = new Date();
+            const threeDays = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+            const upcoming = events.filter(e => {
+                const d = new Date(e.start);
+                return d >= now && d <= threeDays && e.className === 'fc-event-pass-good';
+            });
+
+            if (upcoming.length > 0) {
+                const area = document.getElementById('notification-area');
+                area.innerHTML = `
+                    <div class="notification-banner">
+                        <i class="fas fa-bell"></i>
+                        <p><strong>Upcoming observation window!</strong>
+                        You have ${upcoming.length} satellite analysis event(s) in the next 3 days with good visibility conditions.</p>
+                        <button class="btn btn-sm btn-secondary" onclick="this.parentElement.remove()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+
+                if ('Notification' in window && Notification.permission === 'default') {
+                    Notification.requestPermission();
+                }
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('SATTRACK - Good Observation Window', {
+                        body: `${upcoming.length} satellite event(s) with good visibility in the next 3 days!`,
+                        icon: '/static/img/satellite-icon.png'
+                    });
+                }
+            }
+        })
+        .catch(() => {});
+});
+</script>
+{% endblock %}
