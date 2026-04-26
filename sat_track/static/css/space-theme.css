@@ -617,6 +617,68 @@ tr:last-child td {
 .score-low { background: var(--danger); }
 
 /* ==============================
+   IMAGING SATELLITE BADGE (legacy)
+   ============================== */
+
+.imaging-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.imaging-badge--yes {
+    background: rgba(6, 95, 70, 0.6);
+    color: #6ee7b7;
+    border: 1px solid #065f46;
+}
+
+.imaging-badge--no {
+    background: rgba(59, 31, 31, 0.6);
+    color: #fca5a5;
+    border: 1px solid #7f1d1d;
+}
+
+/* ==============================
+   ACQUISITION STATUS BADGE (Spectator)
+   ============================== */
+
+.acq-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.acq-imaging {
+    background: rgba(6, 95, 70, 0.5);
+    color: #6ee7b7;
+    border: 1px solid #065f46;
+}
+
+.acq-no-image {
+    background: rgba(120, 53, 15, 0.5);
+    color: #fcd34d;
+    border: 1px solid #92400e;
+}
+
+.acq-unknown {
+    background: rgba(55, 65, 81, 0.5);
+    color: #9ca3af;
+    border: 1px solid #374151;
+}
+
+/* ==============================
    RECOMMENDATION CARDS
    ============================== */
 

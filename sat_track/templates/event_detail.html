@@ -62,9 +62,16 @@
                 <span style="color: var(--accent-cyan);">{{ rec.satellite }}</span> &mdash; {{ rec.overpass.timestamp }} UTC
                 {% if rec.date == user_date %}<span style="background:var(--success);color:#000;padding:2px 8px;border-radius:4px;font-size:0.75rem;margin-left:6px;">EXACT DATE</span>{% endif %}
             </strong>
-            <span class="score-pill {% if rec.weather.score >= 80 %}score-high{% elif rec.weather.score >= 60 %}score-medium{% else %}score-low{% endif %}">
-                {{ rec.weather.score }}/100
-            </span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                {% if rec.is_imaging %}
+                <span class="imaging-badge imaging-badge--yes"><i class="fas fa-camera"></i> Imaging</span>
+                {% else %}
+                <span class="imaging-badge imaging-badge--no"><i class="fas fa-times-circle"></i> Non-imaging</span>
+                {% endif %}
+                <span class="score-pill {% if rec.weather.score >= 80 %}score-high{% elif rec.weather.score >= 60 %}score-medium{% else %}score-low{% endif %}">
+                    {{ rec.weather.score }}/100
+                </span>
+            </div>
         </div>
         <p style="color: var(--text-secondary); margin-top: 6px; font-size: 0.9rem;">{{ rec.weather.description }}</p>
         <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">
@@ -76,113 +83,99 @@
 </div>
 {% endif %}
 
-<!-- N2YO Visual Passes -->
-{% if visual_passes %}
+<!-- Spectator Overpasses -->
 <div class="card">
     <div class="card-header">
-        <i class="fas fa-eye"></i>
-        <h2>N2YO Visual Passes ({{ visual_passes_count }})</h2>
+        <i class="fas fa-satellite"></i>
+        <h2>Satellite Passes — Spectator API
+            {% if spectator_count %}<span style="color:var(--text-muted);font-size:0.8rem;font-weight:400;">({{ spectator_count }} passes found)</span>{% endif %}
+        </h2>
     </div>
     <p style="color: var(--text-secondary); margin-bottom: 12px;">
-        Predicted times when optical satellites are visible from the observation area
-        (satellite illuminated by Sun, observer in twilight/darkness). Data from <span style="color:var(--accent-cyan);">N2YO API</span>.
+        Predicted satellite overpasses over your area from <span style="color:var(--accent-cyan);">Spectator.earth API</span>.
+        The <strong>Acquisition</strong> column shows whether the satellite's sensor will actually collect imagery
+        during that pass — based on official acquisition plans from ESA/Copernicus and USGS.
+        {% if spectator_frequency %}<br><i class="fas fa-redo" style="color:var(--text-muted);"></i> <span style="color:var(--text-muted);font-size:0.85rem;">Pass frequency: ~{{ spectator_frequency|floatformat:2 }} passes/day</span>{% endif %}
     </p>
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Satellite</th>
-                    <th>Start (UTC)</th>
-                    <th>Max Elev. (UTC)</th>
-                    <th>End (UTC)</th>
-                    <th>Max El.</th>
-                    <th>Direction</th>
-                    <th>Duration</th>
-                    <th>Mag</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for vp in visual_passes %}
-                <tr>
-                    <td style="color:var(--accent-cyan);font-weight:600;">{{ vp.satellite }}</td>
-                    <td>{{ vp.start_dt }} <span style="color:var(--text-muted);font-size:0.8rem;">{{ vp.startAzCompass }}</span></td>
-                    <td>{{ vp.max_dt }}</td>
-                    <td>{{ vp.end_dt }} <span style="color:var(--text-muted);font-size:0.8rem;">{{ vp.endAzCompass }}</span></td>
-                    <td style="color:var(--accent-cyan);font-weight:600;">{{ vp.maxEl }}°</td>
-                    <td>{{ vp.startAzCompass }} → {{ vp.maxAzCompass }} → {{ vp.endAzCompass }}</td>
-                    <td>{{ vp.duration }}s</td>
-                    <td>{{ vp.mag|default:"—" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-{% endif %}
 
-<!-- N2YO Radio (All) Passes -->
-{% if radio_passes %}
-<div class="card">
-    <div class="card-header">
-        <i class="fas fa-broadcast-tower"></i>
-        <h2>N2YO All Passes — above 10° ({{ radio_passes_count }})</h2>
+    {% if spectator_error %}
+    <div style="padding:12px;background:rgba(239,68,68,0.1);border-left:3px solid var(--danger);border-radius:4px;margin-bottom:12px;">
+        <i class="fas fa-exclamation-triangle" style="color:var(--danger);"></i>
+        <span style="color:var(--danger);">Spectator API error: {{ spectator_error }}</span>
     </div>
-    <p style="color: var(--text-secondary); margin-bottom: 12px;">
-        All predicted passes above 10° elevation from the observation area centre.
-        Data from <span style="color:var(--accent-cyan);">N2YO API</span>.
-    </p>
-    <div class="table-container">
-        <table>
-            <thead>
+    {% endif %}
+
+    {% if spectator_overpasses_by_date %}
+        {% for date, ops in spectator_overpasses_by_date.items %}
+        <h3 style="color:var(--accent-cyan);font-family:'Orbitron',monospace;font-size:0.9rem;margin:20px 0 10px;letter-spacing:1px;">
+            <i class="fas fa-calendar-day"></i> {{ date }}
+            {% if date == user_date %}<span style="background:var(--success);color:#000;padding:2px 8px;border-radius:4px;font-size:0.75rem;margin-left:6px;">YOUR DATE</span>{% endif %}
+        </h3>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Satellite</th>
+                        <th>Time (UTC)</th>
+                        <th>Acquisition</th>
+                        <th>Alt (km)</th>
+                        <th>Position</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for op in ops %}
                 <tr>
-                    <th>Satellite</th>
-                    <th>Start (UTC)</th>
-                    <th>Max Elev. (UTC)</th>
-                    <th>End (UTC)</th>
-                    <th>Max El.</th>
-                    <th>Direction</th>
-                    <th>Duration</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for rp in radio_passes %}
-                <tr>
-                    <td style="color:var(--accent-cyan);font-weight:600;">{{ rp.satellite }}</td>
-                    <td>{{ rp.start_dt }} <span style="color:var(--text-muted);font-size:0.8rem;">{{ rp.startAzCompass }}</span></td>
-                    <td>{{ rp.max_dt }}</td>
-                    <td>{{ rp.end_dt }} <span style="color:var(--text-muted);font-size:0.8rem;">{{ rp.endAzCompass }}</span></td>
-                    <td style="color:var(--accent-cyan);font-weight:600;">{{ rp.maxEl }}°</td>
-                    <td>{{ rp.startAzCompass }} → {{ rp.maxAzCompass }} → {{ rp.endAzCompass }}</td>
-                    <td>{{ rp.duration }}s</td>
+                    <td style="color:var(--accent-cyan);font-weight:600;">{{ op.satellite }}</td>
+                    <td>{{ op.date_display }}</td>
+                    <td>
+                        {% if op.acquisition_status == "imaging" %}
+                        <span class="acq-badge acq-imaging"><i class="fas fa-camera"></i> Will acquire image</span>
+                        {% elif op.acquisition_status == "no_image" %}
+                        <span class="acq-badge acq-no-image"><i class="fas fa-ban"></i> Pass only — no image</span>
+                        {% else %}
+                        <span class="acq-badge acq-unknown"><i class="fas fa-question-circle"></i> Plan unavailable</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ op.alt_km|default:"—" }}</td>
+                    <td style="font-size:0.8rem;color:var(--text-muted);">
+                        {% if op.lat %}{{ op.lat|floatformat:3 }}°, {{ op.lon|floatformat:3 }}°{% else %}—{% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-satellite"></i>
+            <h3>No overpasses found</h3>
+            <p>No satellite passes found for the selected area within the available time window.</p>
+        </div>
+    {% endif %}
 </div>
-{% endif %}
 
 <!-- Summary Stats -->
 <div class="stats-bar">
     <div class="stat-card">
         <div class="stat-icon"><i class="fas fa-satellite"></i></div>
-        <div class="stat-number">{{ satellite_results|length }}</div>
-        <div class="stat-label">Satellites</div>
+        <div class="stat-number">{{ spectator_count|default:"0" }}</div>
+        <div class="stat-label">Total Passes</div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-satellite-dish"></i></div>
-        <div class="stat-number">{{ overpasses_count|default:"0" }}</div>
-        <div class="stat-label">Ground-track Overpasses</div>
+        <div class="stat-icon"><i class="fas fa-camera"></i></div>
+        <div class="stat-number" style="color:var(--success);">{{ imaging_count|default:"0" }}</div>
+        <div class="stat-label">Will Acquire Image</div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-eye"></i></div>
-        <div class="stat-number">{{ visual_passes_count|default:"0" }}</div>
-        <div class="stat-label">N2YO Visual Passes</div>
+        <div class="stat-icon"><i class="fas fa-ban"></i></div>
+        <div class="stat-number" style="color:var(--warning);">{{ no_image_count|default:"0" }}</div>
+        <div class="stat-label">Pass — No Image</div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-broadcast-tower"></i></div>
-        <div class="stat-number">{{ radio_passes_count|default:"0" }}</div>
-        <div class="stat-label">N2YO All Passes</div>
+        <div class="stat-icon"><i class="fas fa-question-circle"></i></div>
+        <div class="stat-number" style="color:var(--text-muted);">{{ unknown_count|default:"0" }}</div>
+        <div class="stat-label">Plan Unavailable</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
@@ -211,7 +204,14 @@
 <div class="card">
     <div class="card-header">
         <i class="fas fa-table"></i>
-        <h2>Trajectory: {{ sr.info.name }} <span style="font-size:0.75rem;color:var(--text-muted);">(NORAD {{ sr.info.norad_id }}, swath {{ sr.info.swath_km }} km)</span></h2>
+        <h2>Trajectory: {{ sr.info.name }}
+            <span style="font-size:0.75rem;color:var(--text-muted);">(NORAD {{ sr.info.norad_id }}, swath {{ sr.info.swath_km }} km)</span>
+            {% if sr.info.imaging %}
+            <span class="imaging-badge imaging-badge--yes" style="font-size:0.7rem;margin-left:8px;"><i class="fas fa-camera"></i> Imaging</span>
+            {% else %}
+            <span class="imaging-badge imaging-badge--no" style="font-size:0.7rem;margin-left:8px;"><i class="fas fa-times-circle"></i> Non-imaging</span>
+            {% endif %}
+        </h2>
     </div>
     <p style="color: var(--text-secondary); margin-bottom: 8px;">
         {{ sr.overpasses_count }} ground-track overpass(es) detected.
@@ -259,9 +259,16 @@
         <div class="pass-item">
             <div class="pass-header">
                 <strong><i class="fas fa-satellite"></i> {{ analysis.satellite|default:"Satellite" }} &mdash; <i class="fas fa-clock"></i> {{ analysis.overpass.timestamp }} UTC</strong>
-                <span class="score-pill {% if analysis.weather.score >= 80 %}score-high{% elif analysis.weather.score >= 60 %}score-medium{% else %}score-low{% endif %}">
-                    {{ analysis.weather.score }}/100
-                </span>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    {% if analysis.is_imaging %}
+                    <span class="imaging-badge imaging-badge--yes" title="{{ analysis.category }}"><i class="fas fa-camera"></i> Imaging satellite</span>
+                    {% else %}
+                    <span class="imaging-badge imaging-badge--no" title="{{ analysis.category }}"><i class="fas fa-times-circle"></i> Non-imaging</span>
+                    {% endif %}
+                    <span class="score-pill {% if analysis.weather.score >= 80 %}score-high{% elif analysis.weather.score >= 60 %}score-medium{% else %}score-low{% endif %}">
+                        {{ analysis.weather.score }}/100
+                    </span>
+                </div>
             </div>
 
             <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 8px;">
@@ -371,7 +378,8 @@
             '<strong>{{ pass.satellite|default:"Satellite" }} Overpass</strong><br>' +
             '<strong>Time:</strong> {{ pass.timestamp }}<br>' +
             '<strong>Position:</strong> {{ pass.latitude|floatformat:4 }}°, {{ pass.longitude|floatformat:4 }}°<br>' +
-            '<strong>Altitude:</strong> {{ pass.altitude_km|floatformat:2 }} km'
+            '<strong>Altitude:</strong> {{ pass.altitude_km|floatformat:2 }} km<br>' +
+            '{% if pass.is_imaging %}<span style="background:#065f46;color:#6ee7b7;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#128247; Imaging satellite</span>{% else %}<span style="background:#3b1f1f;color:#fca5a5;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#10006; Non-imaging</span>{% endif %}'
         );
 
         overpassCoords.push([{{ pass.latitude }}, {{ pass.longitude }}]);
@@ -413,6 +421,7 @@
 
         wm.bindPopup(
             '<strong>{{ analysis.satellite|default:"Satellite" }} — Pass + Weather</strong><br>' +
+            '{% if analysis.is_imaging %}<span style="background:#065f46;color:#6ee7b7;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#128247; Imaging satellite</span>{% else %}<span style="background:#3b1f1f;color:#fca5a5;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#10006; Non-imaging</span>{% endif %}<br>' +
             '<strong>Time:</strong> {{ analysis.overpass.timestamp }}<br>' +
             '<strong>Position:</strong> {{ analysis.overpass.latitude|floatformat:4 }}°, {{ analysis.overpass.longitude|floatformat:4 }}°<br>' +
             '<strong>Weather Score:</strong> {{ analysis.weather.score }}/100<br>' +
@@ -430,6 +439,44 @@
     {% endfor %}
     {% endif %}
 
+    // Spectator overpass markers
+    {% if spectator_overpasses %}
+    {% for op in spectator_overpasses %}
+    {% if op.lat and op.lon %}
+    (function() {
+        var acq = '{{ op.acquisition_status }}';
+        var fillColor = acq === 'imaging' ? '#10b981' : acq === 'no_image' ? '#f59e0b' : '#6b7280';
+        var borderColor = acq === 'imaging' ? '#059669' : acq === 'no_image' ? '#d97706' : '#4b5563';
+        var label = acq === 'imaging' ? '📷 Will acquire image' : acq === 'no_image' ? '🚫 Pass only — no image' : '❓ Plan N/A';
+
+        var sm = L.circleMarker([{{ op.lat }}, {{ op.lon }}], {
+            radius: 8,
+            fillColor: fillColor,
+            color: borderColor,
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.85
+        }).addTo(map);
+
+        sm.bindTooltip(
+            '<strong>{{ op.satellite }}</strong><br>' +
+            '{{ op.date_display }}<br>' +
+            label,
+            { direction: 'top', offset: [0, -10] }
+        );
+
+        sm.bindPopup(
+            '<strong>{{ op.satellite }}</strong><br>' +
+            '<strong>Time:</strong> {{ op.date_display }}<br>' +
+            '<strong>Acquisition:</strong> ' + label + '<br>' +
+            {% if op.alt_km %}'<strong>Altitude:</strong> {{ op.alt_km }} km<br>' + {% endif %}
+            '<strong>Position:</strong> {{ op.lat|floatformat:3 }}°, {{ op.lon|floatformat:3 }}°'
+        );
+    })();
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
     // Legend
     var legend = L.control({position: 'bottomright'});
     legend.onAdd = function () {
@@ -437,9 +484,9 @@
         div.innerHTML =
             '<h4>LEGEND</h4>' +
             '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#00d4ff;opacity:0.3;display:inline-block;border-radius:2px;"></span> Research area</div>' +
-            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#10b981;display:inline-block;border-radius:50%;"></span> Good conditions</div>' +
-            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#f59e0b;display:inline-block;border-radius:50%;"></span> Moderate</div>' +
-            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#ef4444;display:inline-block;border-radius:50%;"></span> Poor conditions</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#10b981;display:inline-block;border-radius:50%;"></span> Will acquire image</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#f59e0b;display:inline-block;border-radius:50%;"></span> Pass only — no image</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:12px;height:12px;background:#6b7280;display:inline-block;border-radius:50%;"></span> Plan unavailable</div>' +
             '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><span style="width:20px;height:2px;background:#3b82f6;display:inline-block;"></span> Trajectory</div>';
         return div;
     };

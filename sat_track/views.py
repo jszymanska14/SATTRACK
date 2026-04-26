@@ -420,7 +420,9 @@ def analyze_satellite_weather_match(overpasses, area_geojson):
 
 from skyfield.api import load, EarthSatellite
 import pytz
-from sat_track.apis import N2YOClient, OPTICAL_SATELLITES
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from sat_track.apis import N2YOClient, OPTICAL_SATELLITES, SpectatorClient
 from shapely.geometry import shape, Point
 from shapely.ops import transform
 import pyproj
@@ -518,8 +520,34 @@ class SatelliteTrajectoryCalculator:
 
 
 # ---------------------------------------------------------------------------
-# SATELLITE ANALYSIS VIEW  (N2YO passes + TLE ground-track, all optical sats)
+# SATELLITE ANALYSIS VIEW  (Spectator passes + TLE ground-track)
 # ---------------------------------------------------------------------------
+
+def _geojson_bbox(area_geojson_str):
+    """Return (min_lon, min_lat, max_lon, max_lat) bounding box from GeoJSON."""
+    try:
+        data = json.loads(area_geojson_str)
+        lons, lats = [], []
+
+        def _collect(obj):
+            if isinstance(obj, list):
+                if len(obj) >= 2 and all(isinstance(v, (int, float)) for v in obj[:2]):
+                    lons.append(obj[0])
+                    lats.append(obj[1])
+                else:
+                    for item in obj:
+                        _collect(item)
+            elif isinstance(obj, dict):
+                for v in obj.values():
+                    _collect(v)
+
+        _collect(data)
+        if lons and lats:
+            return min(lons), min(lats), max(lons), max(lats)
+    except Exception:
+        pass
+    return None
+
 
 def _pass_date_distance(analysis, target_date):
     """Absolute day distance between a pass and the user-chosen date."""
@@ -541,8 +569,6 @@ def sentinel2_over_bbox(request, event_id):
 
     center_lat, center_lon = get_area_center_coordinates(event.area_geojson)
 
-    all_visual_passes = []
-    all_radio_passes = []
     all_overpasses = []
     all_analyzed = []
     all_recommendations = []
@@ -572,6 +598,7 @@ def sentinel2_over_bbox(request, event_id):
 
         for pos in filtered["positions_over_area"]:
             pos["satellite"] = sat_name
+            pos["is_imaging"] = sat_info.get("imaging", False)
 
         all_overpasses.extend(filtered["positions_over_area"])
 
@@ -609,30 +636,49 @@ def sentinel2_over_bbox(request, event_id):
                if item[0] != 'unknown' else 999)
     )
 
-    # --- N2YO visual + radio passes --------------------------------------
-    if center_lat and center_lon:
-        for sat_key, sat_info in OPTICAL_SATELLITES.items():
-            sat_name = sat_info['name']
-            n2yo = N2YOClient(sat_info['norad_id'])
+    # --- Spectator.earth overpasses -----------------------------------------
+    # Single API call returns all satellite passes over the area with the
+    # critical `acquisition` field: True = will image, False = passing only,
+    # None = acquisition plan not available for this satellite.
 
-            vp = n2yo.fetch_visual_passes(
-                round(center_lat, 4), round(center_lon, 4),
-                alt=0, days=7, min_visibility=30,
-            )
-            for p in vp.get("passes", []):
-                p["satellite"] = sat_name
-            all_visual_passes.extend(vp.get("passes", []))
+    spectator_overpasses = []
+    spectator_error = None
+    spectator_frequency = None
+    overpasses_by_date = {}
 
-            rp = n2yo.fetch_radio_passes(
-                round(center_lat, 4), round(center_lon, 4),
-                alt=0, days=7, min_elevation=10,
-            )
-            for p in rp.get("passes", []):
-                p["satellite"] = sat_name
-            all_radio_passes.extend(rp.get("passes", []))
+    bbox = _geojson_bbox(event.area_geojson)
+    if bbox:
+        # Compute how many days before/after today the event falls
+        from datetime import date as _date
+        today = _date.today()
+        event_date_only = user_dt.date() if hasattr(user_dt, 'date') else user_dt
+        days_diff = (event_date_only - today).days
+        days_before_req = max(0, -days_diff + 3)
+        days_after_req = max(7, days_diff + 3)
 
-    all_visual_passes.sort(key=lambda p: p.get("startUTC", 0))
-    all_radio_passes.sort(key=lambda p: p.get("startUTC", 0))
+        sp = SpectatorClient()
+        sp_result = sp.fetch_overpasses(
+            bbox,
+            satellites=SpectatorClient.SUPPORTED_SATELLITES,
+            days_before=days_before_req,
+            days_after=days_after_req,
+        )
+
+        if "error" in sp_result:
+            spectator_error = sp_result["error"]
+        else:
+            spectator_overpasses = sp_result.get("overpasses", [])
+            spectator_frequency = sp_result.get("frequency")
+
+        # Sort by date and group by date for display
+        spectator_overpasses.sort(key=lambda x: x.get("date", ""))
+        for op in spectator_overpasses:
+            d = op.get("date_only", "unknown")
+            overpasses_by_date.setdefault(d, []).append(op)
+
+    imaging_count = sum(1 for o in spectator_overpasses if o.get("acquisition_status") == "imaging")
+    no_image_count = sum(1 for o in spectator_overpasses if o.get("acquisition_status") == "no_image")
+    unknown_count = sum(1 for o in spectator_overpasses if o.get("acquisition_status") == "unknown")
 
     return render(request, "event_detail.html", {
         "event": event,
@@ -643,10 +689,15 @@ def sentinel2_over_bbox(request, event_id):
         "passes_by_date": passes_by_date,
         "recommendations": all_recommendations,
         "area_geojson": event.area_geojson,
-        "visual_passes": all_visual_passes,
-        "visual_passes_count": len(all_visual_passes),
-        "radio_passes": all_radio_passes,
-        "radio_passes_count": len(all_radio_passes),
+        # Spectator overpasses
+        "spectator_overpasses": spectator_overpasses,
+        "spectator_count": len(spectator_overpasses),
+        "spectator_overpasses_by_date": overpasses_by_date,
+        "spectator_frequency": spectator_frequency,
+        "spectator_error": spectator_error,
+        "imaging_count": imaging_count,
+        "no_image_count": no_image_count,
+        "unknown_count": unknown_count,
         "errors": errors,
         "user_date": user_date.isoformat(),
     })
