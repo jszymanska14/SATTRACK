@@ -1,0 +1,638 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ plan.name }} Measurement Plan{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.plan-header {
+    border-bottom: 1px solid var(--border-color);
+    padding: 32px 0 24px;
+    margin-bottom: 32px;
+}
+.plan-header-inner {
+    max-width: 1200px; margin: 0 auto; padding: 0 24px;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+}
+.back-link {
+    color: var(--text-muted); font-size: 0.82rem;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    margin-bottom: 10px; transition: color 0.2s;
+}
+.back-link:hover { color: var(--text-secondary); }
+.plan-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 8px; }
+.plan-chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg-secondary); border: 1px solid var(--border-color);
+    border-radius: 6px; padding: 4px 12px; font-size: 0.8rem; color: var(--text-secondary);
+}
+.chip.accent { border-color: rgba(0,212,255,0.25); color: var(--accent-cyan); background: var(--accent-cyan-dim); }
+.chip.purple { border-color: rgba(124,58,237,0.25); color: #c084fc; background: var(--accent-purple-dim); }
+.chip.green  { border-color: rgba(16,185,129,0.25); color: var(--success); background: var(--success-dim); }
+
+.content-wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px 64px; }
+
+/* ── Phase timeline ─────────────────────────────────────────────────────── */
+.timeline-bar { display: flex; height: 36px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color); }
+.timeline-seg {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.62rem; font-weight: 600; color: rgba(0,0,0,0.8);
+    overflow: hidden; white-space: nowrap; padding: 0 3px;
+    transition: filter 0.15s; cursor: default;
+}
+.timeline-seg:hover { filter: brightness(1.15); z-index: 2; }
+.timeline-labels { display: flex; margin-top: 3px; }
+.timeline-label-cell { font-size: 0.65rem; color: var(--text-muted); text-align: center; overflow: hidden; white-space: nowrap; }
+
+/* ── Season Field Plan document ─────────────────────────────────────────── */
+.season-plan {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.season-plan-header {
+    background: rgba(0, 212, 255, 0.04);
+    border-bottom: 1px solid var(--border-color);
+    padding: 18px 24px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+.season-plan-header h3 {
+    font-size: 0.9rem; font-weight: 600;
+    color: var(--text-primary); letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 8px;
+}
+.season-plan-meta { color: var(--text-muted); font-size: 0.78rem; }
+
+.campaign-row {
+    border-top: 1px solid var(--border-color);
+    display: grid;
+    grid-template-columns: 52px 180px 240px 1fr;
+    min-height: 0;
+}
+@media (max-width: 900px) {
+    .campaign-row { grid-template-columns: 1fr; }
+    .campaign-row > * { border-right: none !important; border-bottom: 1px solid var(--border-color); }
+}
+.cr-num {
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 18px 0 18px;
+    border-right: 1px solid var(--border-color);
+    background: rgba(0,0,0,0.15);
+}
+.cr-num-badge {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent-cyan); color: #000; font-weight: 700;
+    font-size: 0.85rem; display: flex; align-items: center; justify-content: center;
+}
+.cr-date {
+    padding: 18px 16px;
+    border-right: 1px solid var(--border-color);
+    display: flex; flex-direction: column; gap: 6px;
+}
+.cr-date-val { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
+.cr-sat { font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }
+.selection-note {
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.cr-phase {
+    padding: 18px 16px;
+    border-right: 1px solid var(--border-color);
+    display: flex; flex-direction: column; gap: 5px;
+}
+.phase-dot-name {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.85rem; font-weight: 600;
+}
+.phase-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cr-phase .bbch-tag {
+    display: inline-block; background: rgba(0,0,0,0.2);
+    border-radius: 4px; padding: 1px 7px; font-size: 0.72rem; color: var(--text-muted);
+}
+.priority-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    border-radius: 4px; padding: 2px 7px;
+}
+.priority-tag.very_high { background: rgba(255,215,0,0.12); color: #ffd700; border: 1px solid rgba(255,215,0,0.3); }
+.priority-tag.high      { background: var(--success-dim); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+.priority-tag.medium    { background: var(--accent-cyan-dim); color: var(--accent-cyan); border: 1px solid var(--border-glow); }
+
+.cr-detail { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+
+.route-inline {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    font-size: 0.78rem; color: var(--text-muted);
+}
+.route-node {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--bg-card); border: 1px solid var(--border-color);
+    border-radius: 5px; padding: 3px 9px; color: var(--text-secondary);
+}
+.route-node.home { border-color: rgba(245,158,11,0.4); color: #f59e0b; }
+.route-arrow { color: var(--border-color); font-size: 0.7rem; }
+.route-dist { color: var(--text-muted); font-size: 0.7rem; }
+
+/* ── Coverage grid ──────────────────────────────────────────────────────── */
+.coverage-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px;
+}
+.cov-item {
+    display: flex; align-items: center; gap: 9px;
+    background: var(--bg-secondary); border: 1px solid var(--border-color);
+    border-radius: 6px; padding: 8px 12px;
+}
+.cov-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cov-text { flex: 1; min-width: 0; }
+.cov-name { font-size: 0.82rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cov-bbch { font-size: 0.7rem; color: var(--text-muted); }
+.cov-status-ok   { color: var(--success); font-size: 0.85rem; }
+.cov-status-miss { color: var(--text-muted); font-size: 0.85rem; }
+
+/* ── Map ────────────────────────────────────────────────────────────────── */
+#plan-map { height: 440px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); }
+
+/* ── Sat pass list ──────────────────────────────────────────────────────── */
+.pass-list { display: flex; flex-direction: column; gap: 2px; max-height: 440px; overflow-y: auto; }
+.pass-item {
+    display: grid; grid-template-columns: 110px 120px 1fr;
+    gap: 8px; align-items: center;
+    padding: 6px 10px; border-radius: 4px; font-size: 0.78rem;
+    border: 1px solid transparent;
+}
+.pass-item:hover { background: var(--bg-secondary); }
+.pass-item.campaign-pass { border-color: rgba(255,215,0,0.3); background: rgba(255,215,0,0.04); }
+.pass-date { color: var(--text-primary); font-weight: 500; }
+.pass-sat  { font-size: 0.75rem; }
+.pass-phase-name { color: var(--text-muted); font-size: 0.75rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Plan Header ────────────────────────────────────────────────────────── -->
+<div class="plan-header">
+    <div class="plan-header-inner">
+        <div>
+            <a href="{% url 'measurement_planner' %}" class="back-link">
+                <i class="fas fa-arrow-left"></i> All Plans
+            </a>
+            <h1 class="plan-title">{{ plan.name }}</h1>
+            <div class="plan-chips">
+                <span class="chip purple"><i class="fas fa-seedling"></i> {{ plan.get_crop_type_display }}</span>
+                <span class="chip"><i class="fas fa-calendar"></i> Season {{ plan.season_year }}</span>
+                <span class="chip"><i class="fas fa-map-pin"></i> {{ results.fields|length }} field{% if results.fields|length != 1 %}s{% endif %}</span>
+                <span class="chip accent"><i class="fas fa-clipboard-check"></i> {{ results.campaigns|length }} campaigns</span>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+            <form method="post" action="{% url 'plan_delete' plan.id %}"
+                  onsubmit="return confirm('Delete this plan?')">
+                {% csrf_token %}
+                <button type="submit" style="background:transparent;border:1px solid var(--border-color);color:var(--text-muted);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:0.82rem;transition:var(--transition);"
+                        onmouseover="this.style.borderColor='rgba(239,68,68,0.4)';this.style.color='var(--danger)'"
+                        onmouseout="this.style.borderColor='var(--border-color)';this.style.color='var(--text-muted)'">
+                    <i class="fas fa-trash-alt"></i> Delete Plan
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="content-wrap">
+
+    <!-- ── Planning context ─────────────────────────────────────────────── -->
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">
+
+        <!-- Today / forward-looking note -->
+        <div class="card" style="flex:1;min-width:220px;margin-bottom:0;">
+            <div class="card-header" style="padding-bottom:8px;">
+                <i class="fas fa-calendar-day" style="color:var(--accent-cyan);"></i>
+                <h2>Planning starts today</h2>
+            </div>
+            <p style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6;margin-bottom:8px;">
+                Campaigns are scheduled from <strong>{{ season_start_label }}</strong> to
+                <strong>{{ season_end_label }}</strong>.
+                Phases already completed before today are excluded.
+            </p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <span class="chip accent"><i class="fas fa-forward"></i> Forward-looking</span>
+                <span class="chip"><i class="fas fa-satellite"></i> {{ results.campaigns|length }} campaign{% if results.campaigns|length != 1 %}s{% endif %} remaining</span>
+            </div>
+        </div>
+
+        <!-- Nearest IMGW station -->
+        {% if imgw_station and not imgw_station.error %}
+        <div class="card" style="flex:1;min-width:220px;margin-bottom:0;">
+            <div class="card-header" style="padding-bottom:8px;">
+                <i class="fas fa-tower-broadcast" style="color:#adff2f;"></i>
+                <h2>Nearest weather station</h2>
+                <span class="chip" style="margin-left:auto;font-size:0.72rem;">IMGW</span>
+            </div>
+            <p style="font-size:0.9rem;font-weight:600;color:var(--text-primary);margin-bottom:6px;">
+                {{ imgw_station.stacja }}
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:0.8rem;color:var(--text-secondary);">
+                {% if imgw_station.temperatura is not None %}
+                <span><i class="fas fa-thermometer-half" style="color:#f59e0b;"></i> {{ imgw_station.temperatura }} °C</span>
+                {% endif %}
+                {% if imgw_station.wilgotnosc_wzgledna is not None %}
+                <span><i class="fas fa-droplet" style="color:#00d4ff;"></i> {{ imgw_station.wilgotnosc_wzgledna }} %</span>
+                {% endif %}
+                {% if imgw_station.predkosc_wiatru is not None %}
+                <span><i class="fas fa-wind"></i> {{ imgw_station.predkosc_wiatru }} m/s</span>
+                {% endif %}
+                {% if imgw_station.suma_opadu is not None %}
+                <span><i class="fas fa-cloud-rain" style="color:#60a5fa;"></i> {{ imgw_station.suma_opadu }} mm</span>
+                {% endif %}
+            </div>
+            {% if imgw_station.data_pomiaru %}
+            <p style="font-size:0.7rem;color:var(--text-muted);margin-top:8px;">
+                <i class="fas fa-clock"></i> Last reading: {{ imgw_station.data_pomiaru }} {{ imgw_station.godzina_pomiaru }}:00
+            </p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+    </div>
+
+    <!-- ── Phenological Phase Timeline ─────────────────────────────────── -->
+    <div class="card" style="margin-bottom:24px;">
+        <div class="card-header">
+            <i class="fas fa-seedling" style="color:#adff2f;"></i>
+            <h2>Phenological Phase Timeline</h2>
+            <span class="chip" style="margin-left:auto;">
+                <i class="fas fa-calendar-alt"></i> Full season view
+            </span>
+        </div>
+        <div style="overflow-x:auto;">
+            <div class="timeline-bar" id="timelineBar"></div>
+            <div class="timeline-labels" id="timelineLabels"></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;" id="timelineLegend"></div>
+        <p style="color:var(--text-muted);font-size:0.75rem;margin-top:10px;">
+            Greyed-out segments are phases that ended before today.
+            <i class="fas fa-star" style="color:#ffd700;"></i> Very High importance phases are the primary targets for satellite visits.
+        </p>
+    </div>
+
+    <!-- ── Season Field Plan Document ──────────────────────────────────── -->
+    <div class="card" style="margin-bottom:24px;padding:0;overflow:hidden;">
+        <!-- Document header -->
+        <div class="season-plan-header">
+            <h3>
+                <i class="fas fa-clipboard-list" style="color:var(--accent-cyan);"></i>
+                Campaign Schedule
+            </h3>
+            <div class="season-plan-meta">
+                {{ plan.get_crop_type_display }} &nbsp;&bull;&nbsp;
+                Season {{ plan.season_year }} &nbsp;&bull;&nbsp;
+                {{ season_start_label }} to {{ season_end_label }} &nbsp;&bull;&nbsp;
+                {{ results.campaigns|length }} campaign{% if results.campaigns|length != 1 %}s{% endif %}
+                {% if results.fields %}&nbsp;&bull;&nbsp; {{ results.fields|length }} field{% if results.fields|length != 1 %}s{% endif %}{% endif %}
+            </div>
+        </div>
+
+        {% if results.campaigns %}
+        <div class="season-plan">
+            {% for camp in results.campaigns %}
+            {% with phase=camp.phase %}
+            <div class="campaign-row">
+                <!-- Number -->
+                <div class="cr-num">
+                    <span class="cr-num-badge">{{ camp.campaign_number }}</span>
+                </div>
+
+                <!-- Date / Satellite / acquisition -->
+                <div class="cr-date">
+                    <span class="cr-date-val">{{ camp.date_label }}</span>
+                    <span class="cr-sat" style="color:{{ camp.sat_color }};">
+                        <i class="fas fa-satellite"></i> {{ camp.satellite_label }}
+                    </span>
+                    {% if camp.acquisition_status == 'imaging' %}
+                    <span style="font-size:0.72rem;color:var(--success);"><i class="fas fa-camera"></i> Imaging confirmed</span>
+                    {% elif camp.acquisition_status == 'estimated' %}
+                    <span style="font-size:0.72rem;color:var(--warning);"><i class="fas fa-circle-question"></i> Pass estimated</span>
+                    {% elif camp.acquisition_status == 'no_image' %}
+                    <span style="font-size:0.72rem;color:var(--danger);"><i class="fas fa-ban"></i> No image planned</span>
+                    {% else %}
+                    <span style="font-size:0.72rem;color:var(--text-muted);"><i class="fas fa-question-circle"></i> Acquisition unknown</span>
+                    {% endif %}
+                    <div class="selection-note">
+                        <i class="fas fa-calendar-day"></i>
+                        {{ camp.days_from_phase_midpoint }} day{% if camp.days_from_phase_midpoint != 1 %}s{% endif %}
+                        from phase midpoint
+                    </div>
+                    {% if camp.field_route %}
+                    <div style="margin-top:6px;font-size:0.72rem;color:var(--text-muted);">
+                        <i class="fas fa-road"></i> {{ camp.total_distance_km }} km
+                        &nbsp;<i class="fas fa-clock"></i> about {{ camp.estimated_duration_h }} h
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Phase -->
+                <div class="cr-phase">
+                    <div class="phase-dot-name">
+                        <span class="phase-dot" style="background:{{ phase.color }};"></span>
+                        <span style="color:var(--text-primary);">{{ phase.display_name }}</span>
+                    </div>
+                    <span class="bbch-tag">{{ phase.display_bbch }}</span>
+                    {% if phase.importance == 'very_high' %}
+                    <span class="priority-tag very_high"><i class="fas fa-star"></i> Priority</span>
+                    {% elif phase.importance == 'high' %}
+                    <span class="priority-tag high"><i class="fas fa-arrow-up"></i> High</span>
+                    {% elif phase.importance == 'medium' %}
+                    <span class="priority-tag medium">Medium</span>
+                    {% endif %}
+                    <p style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;line-height:1.4;">
+                        {{ phase.display_description|truncatechars:100 }}
+                    </p>
+                </div>
+
+                <!-- Selection reason -->
+                <div class="cr-detail">
+                    <div>
+                        <p style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:6px;">
+                            <i class="fas fa-circle-info"></i> Why this date?
+                        </p>
+                        <p style="font-size:0.78rem;color:var(--text-secondary);line-height:1.5;">
+                            {{ camp.selection_reason }}
+                        </p>
+                    </div>
+                    {% if camp.field_route %}
+                    <div>
+                        <p style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:6px;">
+                            <i class="fas fa-route"></i> Route
+                        </p>
+                        <div class="route-inline">
+                            <span class="route-node home"><i class="fas fa-home"></i> Home</span>
+                            {% for f in camp.field_route %}
+                            <span class="route-arrow"><i class="fas fa-arrow-right"></i></span>
+                            <span class="route-dist">+{{ f.dist_from_prev_km }} km</span>
+                            <span class="route-node">
+                                <i class="fas fa-map-pin" style="color:var(--accent-cyan);font-size:0.7rem;"></i>
+                                {{ f.name }}
+                            </span>
+                            {% endfor %}
+                            <span class="route-arrow"><i class="fas fa-arrow-right"></i></span>
+                            <span class="route-node home"><i class="fas fa-home"></i> Home</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="padding:40px;text-align:center;color:var(--text-muted);">
+            <i class="fas fa-satellite-dish" style="font-size:2rem;margin-bottom:12px;display:block;"></i>
+            <p>No campaigns computed. Draw an area of interest and retry.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ── Phase Coverage Matrix ────────────────────────────────────────── -->
+    <div class="card" style="margin-bottom:24px;">
+        <div class="card-header">
+            <i class="fas fa-th-large"></i>
+            <h2>Phase Coverage</h2>
+        </div>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:14px;">
+            Which recommended campaign covers each phenological phase.
+        </p>
+        <div class="coverage-grid" id="coverageGrid"></div>
+    </div>
+
+    <!-- ── Map + Satellite Pass List ────────────────────────────────────── -->
+    <div class="two-col" style="margin-bottom:24px;">
+
+        <!-- Map -->
+        <div class="card" style="margin-bottom:0;">
+            <div class="card-header">
+                <i class="fas fa-map-marked-alt"></i>
+                <h2>Area Map</h2>
+            </div>
+            <div id="plan-map"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:0.75rem;">
+                <span class="chip"><span style="width:8px;height:8px;background:#00d4ff;border-radius:50%;display:inline-block;"></span> Area of interest</span>
+                <span class="chip"><span style="width:8px;height:8px;background:#00d4ff;border-radius:50%;display:inline-block;"></span> Field</span>
+                <span class="chip"><span style="width:8px;height:8px;background:#f59e0b;border-radius:50%;display:inline-block;"></span> Home</span>
+                <span class="chip"><span style="width:8px;height:8px;background:#10b981;border-radius:50%;display:inline-block;"></span> Route</span>
+            </div>
+        </div>
+
+        <!-- Satellite pass list -->
+        <div class="card" style="margin-bottom:0;">
+            <div class="card-header">
+                <i class="fas fa-satellite"></i>
+                <h2>Satellite Pass Calendar</h2>
+            </div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:0.75rem;color:var(--text-muted);">
+                <span><i class="fas fa-camera" style="color:var(--success);"></i> Imaging confirmed</span>
+                <span><i class="fas fa-circle-question" style="color:var(--warning);"></i> Estimated pass</span>
+                <span><i class="fas fa-star" style="color:#ffd700;"></i> Campaign anchor</span>
+            </div>
+            <div class="pass-list" id="passList"></div>
+        </div>
+
+    </div>
+
+</div><!-- /content-wrap -->
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const CAMPAIGNS_DATA   = {{ campaigns_json|safe }};
+const FIELDS_DATA      = {{ fields_json|safe }};
+const AREA_GEOJSON     = {{ area_geojson_json|safe }};
+const PHASE_TIMELINE   = {{ phase_timeline_json|safe }};
+const HOME_LAT         = {{ results.home_lat }};
+const HOME_LON         = {{ results.home_lon }};
+const SEASON_START     = '{{ season_start }}';
+const SEASON_END       = '{{ season_end }}';
+
+/* ── Phase timeline ── */
+(function () {
+    const bar    = document.getElementById('timelineBar');
+    const labels = document.getElementById('timelineLabels');
+    const legend = document.getElementById('timelineLegend');
+    if (!PHASE_TIMELINE.length) return;
+
+    // Compute full season bounds from all phases in the timeline
+    const allStarts = PHASE_TIMELINE.map(p => new Date(p.start));
+    const allEnds   = PHASE_TIMELINE.map(p => new Date(p.end));
+    const s0 = new Date(Math.min(...allStarts));
+    const s1 = new Date(Math.max(...allEnds));
+    const total = Math.max(1, (s1 - s0) / 86400000);
+
+    PHASE_TIMELINE.forEach(p => {
+        const ps = new Date(p.start), pe = new Date(p.end);
+        const days = Math.max(1, (pe - ps) / 86400000);
+        const w = (days / total * 100).toFixed(2) + '%';
+
+        const seg = document.createElement('div');
+        seg.className = 'timeline-seg';
+        let bg = p.color;
+        if (p.is_past) {
+            bg = 'rgba(120,120,120,0.25)';
+            seg.style.cssText = `width:${w};background:${bg};opacity:0.5;`;
+        } else if (p.is_active) {
+            seg.style.cssText = `width:${w};background:${bg};outline:2px solid #fff;outline-offset:-2px;`;
+        } else {
+            seg.style.cssText = `width:${w};background:${bg};`;
+        }
+        seg.title = `${p.name}\n${p.start} to ${p.end}\nImportance: ${p.importance}${p.is_past ? ' (past)' : p.is_active ? ' (active now)' : ''}`;
+        if (days > total * 0.07) {
+            seg.textContent = (p.importance === 'very_high' && !p.is_past ? '★ ' : '') + p.name;
+        }
+        bar.appendChild(seg);
+
+        const lbl = document.createElement('div');
+        lbl.className = 'timeline-label-cell';
+        lbl.style.width = w;
+        lbl.textContent = p.start_label || '';
+        labels.appendChild(lbl);
+
+        const li = document.createElement('div');
+        const pastStyle = p.is_past ? 'opacity:0.4;text-decoration:line-through;' : '';
+        const activeStyle = p.is_active ? 'font-weight:600;' : '';
+        li.style.cssText = `display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--text-secondary);cursor:default;${pastStyle}${activeStyle}`;
+        li.title = `${p.start} to ${p.end}${p.is_past ? ' — past' : p.is_active ? ' — active now' : ''}`;
+        const dotColor = p.is_past ? '#555' : p.color;
+        const badge = p.is_active ? ' <span style="font-size:0.65rem;background:rgba(0,212,255,0.15);color:var(--accent-cyan);border-radius:3px;padding:1px 5px;margin-left:3px;">now</span>' : '';
+        li.innerHTML = `<span style="width:10px;height:10px;border-radius:2px;background:${dotColor};flex-shrink:0;"></span>${p.name}${badge}`;
+        legend.appendChild(li);
+    });
+})();
+
+/* ── Coverage grid ── */
+(function () {
+    const grid = document.getElementById('coverageGrid');
+    const phaseNames = {};
+    CAMPAIGNS_DATA.forEach(c => { phaseNames[c.phase_name] = c.number; });
+
+    PHASE_TIMELINE.forEach(p => {
+        const covered = phaseNames[p.name] !== undefined;
+        const item = document.createElement('div');
+        item.className = 'cov-item';
+        item.innerHTML = `
+            <span class="cov-dot" style="background:${p.color};"></span>
+            <div class="cov-text">
+                <div class="cov-name" title="${p.name}">${p.name}</div>
+                <div class="cov-bbch">${p.importance}</div>
+            </div>
+            ${covered
+                ? `<span class="cov-status-ok" title="Campaign #${phaseNames[p.name]}"><i class="fas fa-check-circle"></i></span>`
+                : `<span class="cov-status-miss" title="No pass found"><i class="fas fa-times-circle"></i></span>`}
+        `;
+        grid.appendChild(item);
+    });
+})();
+
+/* ── Leaflet Map ── */
+(function () {
+    const map = L.map('plan-map');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap', maxZoom: 19
+    }).addTo(map);
+
+    if (AREA_GEOJSON) {
+        const area = L.geoJSON(AREA_GEOJSON, {
+            style: {
+                color: '#00d4ff',
+                weight: 2,
+                fillColor: '#00d4ff',
+                fillOpacity: 0.08
+            }
+        }).addTo(map);
+        map.fitBounds(area.getBounds(), { padding: [24, 24] });
+    } else {
+        map.setView([HOME_LAT || 52, HOME_LON || 20], 8);
+    }
+
+    if (HOME_LAT && HOME_LON) {
+        const homeIcon = L.divIcon({
+            className: '',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            html: '<div style="width:28px;height:28px;background:#f59e0b;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;color:#000;font-size:13px;box-shadow:0 0 8px rgba(245,158,11,0.7);"><i class="fas fa-home"></i></div>'
+        });
+        L.marker([HOME_LAT, HOME_LON], { icon: homeIcon }).bindPopup('<b>Home</b>').addTo(map);
+    }
+
+    FIELDS_DATA.forEach((f, i) => {
+        const fieldIcon = L.divIcon({
+            className: '',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+            html: `<div style="width:24px;height:24px;background:#00d4ff;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000;box-shadow:0 0 5px rgba(0,212,255,0.6);">${i + 1}</div>`
+        });
+        L.marker([f.lat, f.lon], { icon: fieldIcon })
+            .bindPopup(`<b>${f.name || 'Field ' + (i + 1)}</b><br>${f.lat.toFixed(5)}, ${f.lon.toFixed(5)}`)
+            .addTo(map);
+    });
+
+    const routeColors = ['#10b981', '#00d4ff', '#7c3aed', '#f59e0b', '#ef4444', '#06b6d4'];
+    CAMPAIGNS_DATA.forEach((camp, ci) => {
+        if (!camp.fields || !camp.fields.length) return;
+        const pts = [];
+        if (HOME_LAT && HOME_LON) pts.push([HOME_LAT, HOME_LON]);
+        camp.fields.forEach(f => pts.push([f.lat, f.lon]));
+        if (HOME_LAT && HOME_LON) pts.push([HOME_LAT, HOME_LON]);
+        if (pts.length > 1) {
+            L.polyline(pts, {
+                color: routeColors[ci % routeColors.length],
+                weight: 2,
+                dashArray: '5,4',
+                opacity: 0.7
+            }).bindTooltip(`Campaign ${camp.number}: ${camp.total_distance_km} km`).addTo(map);
+        }
+    });
+})();
+
+/* ── Satellite pass list ── */
+(function () {
+    const list = document.getElementById('passList');
+    const campDates = new Set(CAMPAIGNS_DATA.map(c => c.date));
+
+    {% for sp in results.satellite_calendar %}
+    (function () {
+        const isAnchor = campDates.has('{{ sp.date }}');
+        const div = document.createElement('div');
+        div.className = 'pass-item' + (isAnchor ? ' campaign-pass' : '');
+        div.title = 'Source: {{ sp.source }}';
+        div.innerHTML = `
+            <span class="pass-date">
+                ${isAnchor ? '<i class="fas fa-star" style="color:#ffd700;margin-right:3px;font-size:0.7rem;"></i>' : ''}
+                {{ sp.date_label }}
+            </span>
+            <span class="pass-sat" style="color:{{ sp.sat_color }};">{{ sp.satellite_label }}</span>
+            <span class="pass-phase-name">
+                <span style="width:7px;height:7px;border-radius:50%;background:{{ sp.phase.color }};display:inline-block;margin-right:4px;"></span>
+                {{ sp.phase.display_name }}
+            </span>
+        `;
+        list.appendChild(div);
+    })();
+    {% endfor %}
+
+    if (!list.children.length) {
+        list.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;padding:16px;">No passes computed.</p>';
+    }
+})();
+</script>
+{% endblock %}

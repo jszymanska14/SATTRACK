@@ -63,10 +63,12 @@
                 {% if rec.date == user_date %}<span style="background:var(--success);color:#000;padding:2px 8px;border-radius:4px;font-size:0.75rem;margin-left:6px;">EXACT DATE</span>{% endif %}
             </strong>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                {% if rec.is_imaging %}
-                <span class="imaging-badge imaging-badge--yes"><i class="fas fa-camera"></i> Imaging</span>
+                {% if rec.acquisition_status == "imaging" %}
+                <span class="acq-badge acq-imaging"><i class="fas fa-camera"></i> Will acquire image</span>
+                {% elif rec.acquisition_status == "no_image" %}
+                <span class="acq-badge acq-no-image"><i class="fas fa-ban"></i> Pass only — no image</span>
                 {% else %}
-                <span class="imaging-badge imaging-badge--no"><i class="fas fa-times-circle"></i> Non-imaging</span>
+                <span class="acq-badge acq-unknown"><i class="fas fa-question-circle"></i> Plan unavailable</span>
                 {% endif %}
                 <span class="score-pill {% if rec.weather.score >= 80 %}score-high{% elif rec.weather.score >= 60 %}score-medium{% else %}score-low{% endif %}">
                     {{ rec.weather.score }}/100
@@ -249,6 +251,10 @@
         <i class="fas fa-search-location"></i>
         <h2>Detailed Pass Analysis — All Optical Satellites</h2>
     </div>
+    <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">
+        TLE ground-track passes matched with weather scores. The <strong>Acquisition</strong> badge shows whether
+        Spectator.earth confirms that the satellite will collect imagery over your area during that pass.
+    </p>
 
     {% if passes_by_date %}
         {% for date, passes in passes_by_date.items %}
@@ -260,10 +266,12 @@
             <div class="pass-header">
                 <strong><i class="fas fa-satellite"></i> {{ analysis.satellite|default:"Satellite" }} &mdash; <i class="fas fa-clock"></i> {{ analysis.overpass.timestamp }} UTC</strong>
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    {% if analysis.is_imaging %}
-                    <span class="imaging-badge imaging-badge--yes" title="{{ analysis.category }}"><i class="fas fa-camera"></i> Imaging satellite</span>
+                    {% if analysis.acquisition_status == "imaging" %}
+                    <span class="acq-badge acq-imaging" title="{{ analysis.category }}"><i class="fas fa-camera"></i> Will acquire image</span>
+                    {% elif analysis.acquisition_status == "no_image" %}
+                    <span class="acq-badge acq-no-image" title="{{ analysis.category }}"><i class="fas fa-ban"></i> Pass only — no image</span>
                     {% else %}
-                    <span class="imaging-badge imaging-badge--no" title="{{ analysis.category }}"><i class="fas fa-times-circle"></i> Non-imaging</span>
+                    <span class="acq-badge acq-unknown" title="{{ analysis.category }}"><i class="fas fa-question-circle"></i> Plan unavailable</span>
                     {% endif %}
                     <span class="score-pill {% if analysis.weather.score >= 80 %}score-high{% elif analysis.weather.score >= 60 %}score-medium{% else %}score-low{% endif %}">
                         {{ analysis.weather.score }}/100
@@ -421,7 +429,7 @@
 
         wm.bindPopup(
             '<strong>{{ analysis.satellite|default:"Satellite" }} — Pass + Weather</strong><br>' +
-            '{% if analysis.is_imaging %}<span style="background:#065f46;color:#6ee7b7;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#128247; Imaging satellite</span>{% else %}<span style="background:#3b1f1f;color:#fca5a5;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#10006; Non-imaging</span>{% endif %}<br>' +
+            '{% if analysis.acquisition_status == "imaging" %}<span style="background:#065f46;color:#6ee7b7;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#128247; Will acquire image</span>{% elif analysis.acquisition_status == "no_image" %}<span style="background:#78350f;color:#fcd34d;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#128683; Pass only — no image</span>{% else %}<span style="background:#374151;color:#d1d5db;padding:1px 6px;border-radius:3px;font-size:0.75rem;">&#10067; Plan unavailable</span>{% endif %}<br>' +
             '<strong>Time:</strong> {{ analysis.overpass.timestamp }}<br>' +
             '<strong>Position:</strong> {{ analysis.overpass.latitude|floatformat:4 }}°, {{ analysis.overpass.longitude|floatformat:4 }}°<br>' +
             '<strong>Weather Score:</strong> {{ analysis.weather.score }}/100<br>' +

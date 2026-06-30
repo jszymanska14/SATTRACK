@@ -11,3 +11,4 @@ skyfield>=1.46
 pytz
 shapely>=2.0
 pyproj>=3.6
+numpy>=1.26

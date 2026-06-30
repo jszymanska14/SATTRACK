@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Measurement Planner{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<style>
+.planner-hero {
+    padding: 48px 24px 36px;
+    max-width: 800px;
+    margin: 0 auto;
+    text-align: center;
+}
+.planner-hero .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.7;
+    margin-top: 10px;
+}
+
+.plans-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 0;
+}
+.plan-row {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: var(--transition);
+}
+.plan-row:hover {
+    border-color: rgba(0, 212, 255, 0.25);
+    background: var(--bg-card-hover);
+}
+.plan-row-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--accent-cyan-dim);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent-cyan); font-size: 1.1rem; flex-shrink: 0;
+}
+.plan-row-body { flex: 1; min-width: 0; }
+.plan-row-name { font-weight: 600; color: var(--text-primary); font-size: 0.95rem; margin-bottom: 3px; }
+.plan-row-meta { color: var(--text-muted); font-size: 0.78rem; display: flex; gap: 12px; flex-wrap: wrap; }
+.plan-row-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.btn-view {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    border-radius: 6px; padding: 6px 14px;
+    font-size: 0.82rem; font-weight: 500; cursor: pointer;
+    text-decoration: none; transition: var(--transition);
+    display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-view:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+.btn-del {
+    background: transparent; border: 1px solid var(--border-color);
+    color: var(--text-muted); border-radius: 6px; padding: 6px 10px;
+    font-size: 0.82rem; cursor: pointer; transition: var(--transition);
+}
+.btn-del:hover { border-color: rgba(239,68,68,0.4); color: var(--danger); }
+
+.section-divider {
+    display: flex; align-items: center; gap: 12px;
+    color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 1.2px; margin: 32px 0 20px;
+}
+.section-divider::before, .section-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border-color);
+}
+
+.form-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+@media (max-width: 860px) { .form-two-col { grid-template-columns: 1fr; } }
+
+#planner-map {
+    height: 400px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.field-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg-secondary); border: 1px solid var(--border-color);
+    border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; color: var(--text-secondary);
+}
+.field-tag button {
+    background: none; border: none; color: var(--text-muted); cursor: pointer;
+    font-size: 0.8rem; padding: 0; line-height: 1; transition: color 0.2s;
+}
+.field-tag button:hover { color: var(--danger); }
+
+.empty-state {
+    padding: 40px 20px; text-align: center; color: var(--text-muted);
+    border: 1px dashed var(--border-color); border-radius: var(--radius-md);
+}
+.empty-state i { font-size: 2rem; margin-bottom: 12px; display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<div class="planner-hero">
+    <h1 class="page-title">Field Measurement Planner</h1>
+    <p class="page-subtitle">
+        Plan field campaigns aligned with Sentinel 2 and Landsat satellite passes
+        and phenological crop growth phases.
+        Draw the area of interest on the map, set the crop type and harvest year,
+        and receive a clear schedule for the full growing season.
+    </p>
+</div>
+
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 24px 64px;">
+
+    <!-- ── Existing plans ───────────────────────────────────────────────── -->
+    {% if plans %}
+    <div class="section-divider"><i class="fas fa-folder-open"></i> Saved Plans</div>
+    <div class="plans-grid">
+        {% for plan in plans %}
+        <div class="plan-row">
+            <div class="plan-row-icon"><i class="fas fa-map-marked-alt"></i></div>
+            <div class="plan-row-body">
+                <div class="plan-row-name">{{ plan.name }}</div>
+                <div class="plan-row-meta">
+                    <span><i class="fas fa-seedling"></i> {{ plan.get_crop_type_display }}</span>
+                    <span><i class="fas fa-calendar"></i> Season {{ plan.season_year }}</span>
+                </div>
+            </div>
+            <div class="plan-row-actions">
+                <a href="{% url 'plan_detail' plan.id %}" class="btn-view">
+                    <i class="fas fa-arrow-right"></i> Open
+                </a>
+                <form method="post" action="{% url 'plan_delete' plan.id %}" style="display:inline;"
+                      onsubmit="return confirm('Delete plan \'{{ plan.name }}\'?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-del" title="Delete plan">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ── Create new plan ──────────────────────────────────────────────── -->
+    <div class="section-divider"><i class="fas fa-plus"></i> New Plan</div>
+
+    <div class="card" style="margin-bottom: 0;">
+        <div class="card-header">
+            <i class="fas fa-clipboard-list"></i>
+            <h2>Create Measurement Plan</h2>
+        </div>
+
+        <form method="post" id="planForm">
+            {% csrf_token %}
+            {{ form.area_geojson }}
+            {{ form.fields_json }}
+
+            <div class="form-two-col">
+
+                <!-- Left: metadata -->
+                <div style="display: flex; flex-direction: column; gap: 18px;">
+
+                    <div class="form-group">
+                        <label class="form-label">Plan Name</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <p style="color:var(--danger);font-size:0.8rem;margin-top:4px;">{{ form.name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                        <div class="form-group">
+                            <label class="form-label">Crop Type</label>
+                            {{ form.crop_type }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Harvest Year</label>
+                            {{ form.season_year }}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label">
+                            <i class="fas fa-home"></i> Home Start Point
+                        </label>
+                        <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:8px;">
+                            Set the point where the field trip starts and ends.
+                        </p>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                            <div class="form-group">
+                                <label class="form-label" style="font-size:0.75rem;">Latitude</label>
+                                {{ form.home_lat }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="font-size:0.75rem;">Longitude</label>
+                                {{ form.home_lon }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Notes (optional)</label>
+                        {{ form.notes }}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg" id="submitBtn"
+                            style="width:100%;margin-top:auto;" disabled>
+                        <i class="fas fa-satellite-dish" id="submitIcon"></i>
+                        <span id="submitText">Generate Measurement Plan</span>
+                    </button>
+                    <p id="formHint" style="color:var(--text-muted);font-size:0.78rem;text-align:center;margin-top:-10px;">
+                        Draw the area, set home and add at least one field to continue.
+                    </p>
+                </div>
+
+                <!-- Right: map -->
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    <div>
+                        <label class="form-label">
+                            <i class="fas fa-map"></i> Area of Interest
+                        </label>
+                        <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:8px;">
+                            Use the <strong>Draw Polygon</strong> tool in the map toolbar to define the area of interest.
+                            Then set home and mark fields for the route.
+                        </p>
+                    </div>
+
+                    <div style="display:flex;gap:8px;">
+                        <button type="button" id="btnModeField" class="btn btn-secondary"
+                                style="flex:1;padding:7px 12px;font-size:0.82rem;"
+                                onclick="setMode('field')">
+                            <i class="fas fa-map-pin"></i> Add Field
+                        </button>
+                        <button type="button" id="btnModeHome" class="btn btn-secondary"
+                                style="flex:1;padding:7px 12px;font-size:0.82rem;"
+                                onclick="setMode('home')">
+                            <i class="fas fa-home"></i> Set Home
+                        </button>
+                    </div>
+
+                    <div id="planner-map"></div>
+                    <div id="fieldTags" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;"></div>
+                    <p id="fieldCountMsg" style="color:var(--text-muted);font-size:0.78rem;">
+                        0 fields added
+                    </p>
+                </div>
+            </div><!-- /form-two-col -->
+        </form>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script>
+(function () {
+    /* ── Map ── */
+    const map = L.map('planner-map').setView([52.0, 20.0], 7);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+    }).addTo(map);
+
+    /* ── Leaflet.draw for AOI polygon (same pattern as home.html) ── */
+    const drawnItems = new L.FeatureGroup().addTo(map);
+    const drawControl = new L.Control.Draw({
+        edit: { featureGroup: drawnItems },
+        draw: {
+            polygon: {
+                shapeOptions: { color: '#00d4ff', weight: 2, fillColor: '#00d4ff', fillOpacity: 0.08 }
+            },
+            rectangle: {
+                shapeOptions: { color: '#00d4ff', weight: 2, fillColor: '#00d4ff', fillOpacity: 0.08 }
+            },
+            circle: false, polyline: false, marker: false, circlemarker: false
+        }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+        drawnItems.clearLayers();
+        drawnItems.addLayer(e.layer);
+        document.getElementById('id_area_geojson').value = JSON.stringify(e.layer.toGeoJSON());
+        checkReady();
+    });
+
+    let mode = 'field';
+    let fields = [];
+    let fieldMarkers = [];
+    let homeMarker = null;
+
+    window.setMode = function (m) {
+        mode = m;
+        const fieldBtn = document.getElementById('btnModeField');
+        const homeBtn = document.getElementById('btnModeHome');
+        fieldBtn.style.borderColor = m === 'field' ? 'var(--accent-cyan)' : '';
+        homeBtn.style.borderColor = m === 'home' ? 'var(--accent-cyan)' : '';
+        fieldBtn.style.color = m === 'field' ? 'var(--accent-cyan)' : '';
+        homeBtn.style.color = m === 'home' ? 'var(--accent-cyan)' : '';
+    };
+    setMode('field');
+
+    const fieldIcon = (n) => L.divIcon({
+        className: '',
+        iconSize: [26, 26], iconAnchor: [13, 13],
+        html: `<div style="width:26px;height:26px;background:#00d4ff;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;box-shadow:0 0 6px rgba(0,212,255,0.6);">${n}</div>`
+    });
+    const homeIcon = L.divIcon({
+        className: '',
+        iconSize: [28, 28], iconAnchor: [14, 14],
+        html: '<div style="width:28px;height:28px;background:#f59e0b;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;color:#000;font-size:13px;box-shadow:0 0 8px rgba(245,158,11,0.7);"><i class="fas fa-home"></i></div>'
+    });
+
+    map.on('click', function (e) {
+        const { lat, lng } = e.latlng;
+        if (mode === 'home') {
+            if (homeMarker) map.removeLayer(homeMarker);
+            homeMarker = L.marker([lat, lng], { icon: homeIcon })
+                .bindPopup('<b>Home</b>').addTo(map);
+            document.getElementById('id_home_lat').value = lat.toFixed(6);
+            document.getElementById('id_home_lon').value = lng.toFixed(6);
+            setMode('field');
+            checkReady();
+            return;
+        }
+
+        const idx = fields.length + 1;
+        fields.push({ id: idx, name: 'Field ' + idx, lat: parseFloat(lat.toFixed(6)), lon: parseFloat(lng.toFixed(6)) });
+        const marker = L.marker([lat, lng], { icon: fieldIcon(idx) })
+            .bindPopup(`<b>Field ${idx}</b><br>${lat.toFixed(5)}, ${lng.toFixed(5)}`).addTo(map);
+        fieldMarkers.push(marker);
+        syncFields();
+    });
+
+    function syncFields() {
+        document.getElementById('id_fields_json').value = JSON.stringify(fields);
+        renderFieldTags();
+        checkReady();
+    }
+
+    function renderFieldTags() {
+        const wrap = document.getElementById('fieldTags');
+        const msg = document.getElementById('fieldCountMsg');
+        wrap.innerHTML = fields.map((f, i) =>
+            `<span class="field-tag">
+                <i class="fas fa-map-pin" style="color:var(--accent-cyan);"></i>
+                ${f.name}
+                <button onclick="removeField(${i})" title="Remove"><i class="fas fa-times"></i></button>
+            </span>`
+        ).join('');
+        msg.textContent = fields.length + ' field' + (fields.length !== 1 ? 's' : '') + ' added';
+    }
+
+    window.removeField = function (i) {
+        map.removeLayer(fieldMarkers[i]);
+        fields.splice(i, 1);
+        fieldMarkers.splice(i, 1);
+        fields.forEach((f, j) => { f.id = j + 1; f.name = 'Field ' + (j + 1); });
+        syncFields();
+    };
+
+    function checkReady() {
+        const hasArea   = document.getElementById('id_area_geojson').value.trim() !== '';
+        const hasName   = document.getElementById('id_name').value.trim() !== '';
+        const hasHome   = document.getElementById('id_home_lat').value.trim() !== ''
+            && document.getElementById('id_home_lon').value.trim() !== '';
+        const hasFields = fields.length > 0;
+        const btn  = document.getElementById('submitBtn');
+        const hint = document.getElementById('formHint');
+        btn.disabled = !(hasArea && hasName && hasHome && hasFields);
+        if (!hasArea)   hint.textContent = 'Draw the study area polygon to continue.';
+        else if (!hasHome) hint.textContent = 'Set the home start point.';
+        else if (!hasFields) hint.textContent = 'Add at least one field.';
+        else if (!hasName)   hint.textContent = 'Enter a plan name to continue.';
+        else                 hint.textContent = 'Ready to generate.';
+    }
+
+    document.getElementById('id_name').addEventListener('input', checkReady);
+    document.getElementById('id_home_lat').addEventListener('input', checkReady);
+    document.getElementById('id_home_lon').addEventListener('input', checkReady);
+
+    document.getElementById('planForm').onsubmit = function () {
+        document.getElementById('submitIcon').className = 'fas fa-spinner fa-spin';
+        document.getElementById('submitText').textContent = 'Generating plan…';
+        document.getElementById('submitBtn').disabled = true;
+    };
+})();
+</script>
+{% endblock %}

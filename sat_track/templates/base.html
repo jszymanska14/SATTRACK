@@ -22,7 +22,9 @@
         <div class="nav-links" id="navLinks">
             <a href="{% url 'home' %}" class="nav-link"><i class="fas fa-rocket"></i> Home</a>
             <a href="{% url 'weather_panel' %}" class="nav-link"><i class="fas fa-cloud-moon"></i> Weather</a>
+            <a href="{% url 'spectrometer' %}" class="nav-link"><i class="fas fa-wave-square"></i> Spectrometer</a>
             {% if request.session.user_id %}
+                <a href="{% url 'measurement_planner' %}" class="nav-link"><i class="fas fa-clipboard-list"></i> Planner</a>
                 <a href="{% url 'profile' %}" class="nav-link"><i class="fas fa-user-astronaut"></i> User Panel</a>
                 <a href="{% url 'observation_calendar' %}" class="nav-link"><i class="fas fa-calendar-alt"></i> Calendar</a>
                 <a href="{% url 'logout' %}" class="nav-link logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>

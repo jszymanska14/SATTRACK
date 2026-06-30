@@ -2,7 +2,47 @@
 staticfiles/
 __pycache__/
 *.pyc
+*.pyo
 db.sqlite3
 .env
+.venv/
 .venv-thesis/
+
+# macOS
+.DS_Store
+
+# Satellite imagery data (very large)
+*.SAFE/
+
+# Field data and analysis outputs
+*.csv
+*.gpx
+*.usr
+*.txt
+tarngory_*
+jezioro_miedzybrodzkie*/
+ndvi_comparison.csv
+chlorophyll_results.csv
+punkty.csv
+
+# Jupyter notebooks and checkpoints
+*.ipynb
+.ipynb_checkpoints/
+
+# Generated plots and images
+ndvi_*.png
+fig_*.png
+output_*.png
+
+# Thesis and document files
+*.tex
+*.zip
+*.docx
+*.pdf
+*.pptx_extract/
+Praca_Magisterska*
+PL_EN_Thesis*
+project/Magisterka/
+project/Magisterka.zip
+
 

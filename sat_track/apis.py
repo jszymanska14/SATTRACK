@@ -1,6 +1,7 @@
 import json
+import math
 import requests
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, date, timedelta, timezone as dt_timezone
 
 
 # Detailed trajectory analysis set (TLE + weather matching, small focused subset)
@@ -94,7 +95,7 @@ SATELLITE_CATALOG = {
     'kompsat-5':    {'norad_id': 39072, 'name': 'KOMPSAT-5',   'imaging': True,  'category': 'SAR Imaging (KARI)'},
     'vrss-2':       {'norad_id': 43197, 'name': 'VRSS-2',      'imaging': True,  'category': 'Optical Imaging (VNSC)'},
     'venus':        {'norad_id': 42901, 'name': 'VENµS',       'imaging': True,  'category': 'Vegetation Imaging (ESA/CNES)'},
-    # ── Non-imaging (dla porównania) ──────────────────────────────────────────
+    # ── Non-imaging (reference only) ──────────────────────────────────────────
     'iss':          {'norad_id': 25544, 'name': 'ISS',                    'imaging': False, 'category': 'Space Station'},
     'hubble':       {'norad_id': 20580, 'name': 'Hubble Space Telescope', 'imaging': False, 'category': 'Space Telescope (not Earth)'},
     'jason-3':      {'norad_id': 41240, 'name': 'Jason-3',               'imaging': False, 'category': 'Radar Altimetry (CNES/EUMETSAT)'},
@@ -262,6 +263,846 @@ class N2YOClient:
 # Backward-compatible alias
 class N2YOTLEFetcher(N2YOClient):
     pass
+
+
+# ---------------------------------------------------------------------------
+# IMGW (Polish Institute of Meteorology and Water Management) API client
+# ---------------------------------------------------------------------------
+
+class IMGWClient:
+    """
+    Client for IMGW public data API (danepubliczne.imgw.pl).
+    Provides current synoptic measurements from Polish meteorological stations.
+    """
+
+    BASE_URL = "https://danepubliczne.imgw.pl/api/data"
+
+    # Known major IMGW synoptic station coordinates (lat, lon, station name in API)
+    STATION_COORDS = {
+        'WARSZAWA-OKĘCIE':  (52.17, 20.97),
+        'KRAKÓW-OBSERWATORIUM': (50.07, 19.97),
+        'WROCŁAW':          (51.10, 16.89),
+        'GDAŃSK':           (54.38, 18.47),
+        'POZNAŃ':           (52.42, 16.83),
+        'KATOWICE':         (50.25, 19.03),
+        'LUBLIN':           (51.22, 22.40),
+        'RZESZÓW':          (50.11, 22.03),
+        'ŁÓDŹ':             (51.73, 19.40),
+        'BYDGOSZCZ':        (53.13, 18.00),
+        'KIELCE':           (50.87, 20.63),
+        'BIAŁYSTOK':        (53.10, 23.17),
+        'OLSZTYN':          (53.78, 20.43),
+        'SZCZECIN':         (53.40, 14.62),
+        'OPOLE':            (50.67, 17.97),
+        'ZIELONA GÓRA':     (51.93, 15.50),
+        'TORUŃ':            (53.05, 18.57),
+        'ZAMOŚĆ':           (50.72, 23.25),
+        'SUWAŁKI':          (54.13, 22.93),
+        'ZAKOPANE':         (49.30, 19.95),
+    }
+
+    def get_synoptic_data(self):
+        """Fetch current synoptic measurements from all stations."""
+        try:
+            r = requests.get(f"{self.BASE_URL}/synop/", timeout=10)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_nearest_station(self, lat, lon):
+        """Return synoptic data for the IMGW station nearest to (lat, lon)."""
+        nearest_name = None
+        min_dist = float('inf')
+        for name, (slat, slon) in self.STATION_COORDS.items():
+            dist = math.sqrt((slat - lat) ** 2 + (slon - lon) ** 2)
+            if dist < min_dist:
+                min_dist = dist
+                nearest_name = name
+
+        if not nearest_name:
+            return None
+
+        all_data = self.get_synoptic_data()
+        if isinstance(all_data, dict) and "error" in all_data:
+            return {"error": all_data["error"], "station_name": nearest_name}
+
+        if isinstance(all_data, list):
+            for station in all_data:
+                station_name_api = str(station.get('stacja', '')).upper()
+                nearest_upper = nearest_name.upper()
+                # Fuzzy match on first word
+                if nearest_upper.split('-')[0].split()[0] in station_name_api:
+                    station['_distance_deg'] = round(min_dist, 3)
+                    return station
+
+        return {"station_name": nearest_name, "distance_deg": round(min_dist, 3), "note": "Station found but data not matched"}
+
+    def get_station_summary(self, station_data):
+        """Convert raw IMGW station dict to a clean summary dict."""
+        if not station_data or "error" in station_data:
+            return None
+        return {
+            'station': station_data.get('stacja', 'Unknown'),
+            'date': station_data.get('data_pomiaru', ''),
+            'hour': station_data.get('godzina_pomiaru', ''),
+            'temperature_c': station_data.get('temperatura'),
+            'wind_speed_ms': station_data.get('predkosc_wiatru'),
+            'wind_dir': station_data.get('kierunek_wiatru'),
+            'humidity_pct': station_data.get('wilgotnosc_wzgledna'),
+            'precipitation_mm': station_data.get('suma_opadu'),
+            'pressure_hpa': station_data.get('cisnienie'),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Phenological calendar for Polish agricultural conditions  (~52 N)
+# ---------------------------------------------------------------------------
+# Phases defined as (month, day) start/end relative to the growing season.
+# year_offset = -1 means the date belongs to the year before season_year
+#               (used for winter crops sown in autumn).
+# cross_year = True  when start is in year_offset year and end is in season_year.
+# importance: 'very_high' | 'high' | 'medium' | 'low'
+
+PHENOLOGICAL_CALENDAR = {
+    # ── Winter Wheat ──────────────────────────────────────
+    'winter_wheat': [
+        {
+            'key': 'bbch_0',
+            'name': 'Germination',
+            'bbch': 'BBCH 0',
+            'color': '#8B4513',
+            'start': (10, 1), 'end': (10, 25), 'year_offset': -1,
+            'importance': 'medium',
+            'icon': 'fas fa-seedling',
+            'measurements': [],
+            'description': 'Grain germination after autumn sowing.',
+        },
+        {
+            'key': 'bbch_1',
+            'name': 'Leaf Development',
+            'bbch': 'BBCH 1',
+            'color': '#90EE90',
+            'start': (10, 20), 'end': (11, 20), 'year_offset': -1,
+            'importance': 'medium',
+            'icon': 'fas fa-leaf',
+            'measurements': [],
+            'description': 'Development of first leaves after emergence.',
+        },
+        {
+            'key': 'bbch_2',
+            'name': 'Tillering',
+            'bbch': 'BBCH 2',
+            'color': '#228B22',
+            'start': (11, 10), 'end': (3, 15), 'year_offset': -1, 'cross_year': True,
+            'importance': 'high',
+            'icon': 'fas fa-layer-group',
+            'measurements': [],
+            'description': 'Autumn and winter tillering; plant tolerates low temperatures.',
+        },
+        {
+            'key': 'bbch_3',
+            'name': 'Stem Elongation',
+            'bbch': 'BBCH 3',
+            'color': '#ADFF2F',
+            'start': (3, 10), 'end': (5, 5), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-arrow-up',
+            'measurements': [],
+            'description': 'Rapid stem extension; critical stage for yield formation.',
+        },
+        {
+            'key': 'bbch_4',
+            'name': 'Booting',
+            'bbch': 'BBCH 4',
+            'color': '#7CFC00',
+            'start': (4, 25), 'end': (5, 25), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-circle',
+            'measurements': [],
+            'description': 'Ear forms inside the leaf sheath.',
+        },
+        {
+            'key': 'bbch_5',
+            'name': 'Heading',
+            'bbch': 'BBCH 5',
+            'color': '#FFD700',
+            'start': (5, 15), 'end': (6, 10), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-spa',
+            'measurements': [],
+            'description': 'Ear emergence from leaf sheath; maximum canopy LAI.',
+        },
+        {
+            'key': 'bbch_6',
+            'name': 'Flowering',
+            'bbch': 'BBCH 6',
+            'color': '#FFA500',
+            'start': (6, 1), 'end': (6, 25), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-sun',
+            'measurements': [],
+            'description': 'Flowering and pollination; heat or drought reduce grain number.',
+        },
+        {
+            'key': 'bbch_7',
+            'name': 'Grain Development',
+            'bbch': 'BBCH 7',
+            'color': '#FF8C00',
+            'start': (6, 15), 'end': (7, 15), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-cube',
+            'measurements': [],
+            'description': 'Grain filling with starch and protein.',
+        },
+        {
+            'key': 'bbch_8',
+            'name': 'Ripening',
+            'bbch': 'BBCH 8',
+            'color': '#DAA520',
+            'start': (7, 5), 'end': (8, 10), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-star',
+            'measurements': [],
+            'description': 'Grain drying; NDVI decreases as maturity progresses.',
+        },
+        {
+            'key': 'bbch_9',
+            'name': 'Senescence',
+            'bbch': 'BBCH 9',
+            'color': '#A0522D',
+            'start': (7, 25), 'end': (8, 25), 'year_offset': 0,
+            'importance': 'low',
+            'icon': 'fas fa-hourglass-end',
+            'measurements': [],
+            'description': 'Natural plant senescence after harvest.',
+        },
+    ],
+
+    # ── Spring Barley ──────────────────────────────────────────────────────
+    'spring_barley': [
+        {
+            'key': 'bbch_0',
+            'name': 'Germination',
+            'bbch': 'BBCH 0',
+            'color': '#8B4513',
+            'start': (3, 20), 'end': (4, 20), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-seedling',
+            'measurements': [],
+            'description': 'Grain germination after spring sowing.',
+        },
+        {
+            'key': 'bbch_1',
+            'name': 'Leaf Development',
+            'bbch': 'BBCH 1',
+            'color': '#90EE90',
+            'start': (4, 10), 'end': (5, 5), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-leaf',
+            'measurements': [],
+            'description': 'Development of successive leaves after emergence.',
+        },
+        {
+            'key': 'bbch_2',
+            'name': 'Tillering',
+            'bbch': 'BBCH 2',
+            'color': '#228B22',
+            'start': (4, 25), 'end': (5, 20), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-layer-group',
+            'measurements': [],
+            'description': 'Formation of side shoots (spring tillering).',
+        },
+        {
+            'key': 'bbch_3',
+            'name': 'Stem Elongation',
+            'bbch': 'BBCH 3',
+            'color': '#ADFF2F',
+            'start': (5, 10), 'end': (6, 10), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-arrow-up',
+            'measurements': [],
+            'description': 'Rapid stem elongation; fastest biomass accumulation.',
+        },
+        {
+            'key': 'bbch_4',
+            'name': 'Booting',
+            'bbch': 'BBCH 4',
+            'color': '#7CFC00',
+            'start': (5, 25), 'end': (6, 20), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-circle',
+            'measurements': [],
+            'description': 'Ear forms inside the leaf sheath.',
+        },
+        {
+            'key': 'bbch_5',
+            'name': 'Heading',
+            'bbch': 'BBCH 5',
+            'color': '#FFD700',
+            'start': (6, 5), 'end': (6, 28), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-spa',
+            'measurements': [],
+            'description': 'Ear emergence; maximum canopy cover.',
+        },
+        {
+            'key': 'bbch_6',
+            'name': 'Flowering',
+            'bbch': 'BBCH 6',
+            'color': '#FFA500',
+            'start': (6, 15), 'end': (7, 5), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-sun',
+            'measurements': [],
+            'description': 'Flowering and pollination.',
+        },
+        {
+            'key': 'bbch_7',
+            'name': 'Grain Development',
+            'bbch': 'BBCH 7',
+            'color': '#FF8C00',
+            'start': (6, 25), 'end': (7, 22), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-cube',
+            'measurements': [],
+            'description': 'Grain filling.',
+        },
+        {
+            'key': 'bbch_8',
+            'name': 'Ripening',
+            'bbch': 'BBCH 8',
+            'color': '#DAA520',
+            'start': (7, 15), 'end': (8, 15), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-star',
+            'measurements': [],
+            'description': 'Grain drying and ripening.',
+        },
+        {
+            'key': 'bbch_9',
+            'name': 'Senescence',
+            'bbch': 'BBCH 9',
+            'color': '#A0522D',
+            'start': (8, 5), 'end': (8, 30), 'year_offset': 0,
+            'importance': 'low',
+            'icon': 'fas fa-hourglass-end',
+            'measurements': [],
+            'description': 'Natural plant senescence after harvest.',
+        },
+    ],
+
+    # ── Winter Rapeseed ─────────────────────────────────────
+    'rapeseed': [
+        {
+            'key': 'bbch_0',
+            'name': 'Germination',
+            'bbch': 'BBCH 0',
+            'color': '#8B4513',
+            'start': (8, 15), 'end': (9, 15), 'year_offset': -1,
+            'importance': 'medium',
+            'icon': 'fas fa-seedling',
+            'measurements': [],
+            'description': 'Rapeseed germination after summer sowing.',
+        },
+        {
+            'key': 'bbch_1',
+            'name': 'Leaf Development (Rosette)',
+            'bbch': 'BBCH 1',
+            'color': '#90EE90',
+            'start': (9, 10), 'end': (11, 20), 'year_offset': -1,
+            'importance': 'high',
+            'icon': 'fas fa-leaf',
+            'measurements': [],
+            'description': 'Development of leaf rosette before winter.',
+        },
+        {
+            'key': 'bbch_2',
+            'name': 'Side Shoot Formation',
+            'bbch': 'BBCH 2',
+            'color': '#228B22',
+            'start': (10, 15), 'end': (12, 1), 'year_offset': -1,
+            'importance': 'medium',
+            'icon': 'fas fa-layer-group',
+            'measurements': [],
+            'description': 'Side shoot formation before winter dormancy.',
+        },
+        {
+            'key': 'bbch_3',
+            'name': 'Main Stem Elongation',
+            'bbch': 'BBCH 3',
+            'color': '#ADFF2F',
+            'start': (2, 15), 'end': (4, 10), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-arrow-up',
+            'measurements': [],
+            'description': 'Spring elongation of the main stem after winter dormancy.',
+        },
+        {
+            'key': 'bbch_5',
+            'name': 'Flower Bud Development',
+            'bbch': 'BBCH 5',
+            'color': '#FFD700',
+            'start': (3, 15), 'end': (4, 25), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-spa',
+            'measurements': [],
+            'description': 'Formation of flower buds.',
+        },
+        {
+            'key': 'bbch_6',
+            'name': 'Flowering',
+            'bbch': 'BBCH 6',
+            'color': '#FFA500',
+            'start': (4, 10), 'end': (5, 15), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-sun',
+            'measurements': [],
+            'description': 'Rapeseed flowering; best spectral contrast in satellite imagery.',
+        },
+        {
+            'key': 'bbch_7',
+            'name': 'Pod Development',
+            'bbch': 'BBCH 7',
+            'color': '#FF8C00',
+            'start': (5, 10), 'end': (6, 15), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-cube',
+            'measurements': [],
+            'description': 'Pod filling and oil accumulation.',
+        },
+        {
+            'key': 'bbch_8',
+            'name': 'Ripening',
+            'bbch': 'BBCH 8',
+            'color': '#DAA520',
+            'start': (6, 10), 'end': (7, 15), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-star',
+            'measurements': [],
+            'description': 'Pod drying; harvest timing monitoring.',
+        },
+        {
+            'key': 'bbch_9',
+            'name': 'Senescence',
+            'bbch': 'BBCH 9',
+            'color': '#A0522D',
+            'start': (7, 1), 'end': (7, 25), 'year_offset': 0,
+            'importance': 'low',
+            'icon': 'fas fa-hourglass-end',
+            'measurements': [],
+            'description': 'Natural plant senescence after harvest.',
+        },
+    ],
+
+    # ── Corn (Maize) ────────────────────────────────────────────
+    'corn': [
+        {
+            'key': 'bbch_0',
+            'name': 'Germination',
+            'bbch': 'BBCH 0',
+            'color': '#8B4513',
+            'start': (4, 20), 'end': (5, 20), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-seedling',
+            'measurements': [],
+            'description': 'Maize germination; soil temperature >10°C required.',
+        },
+        {
+            'key': 'bbch_1',
+            'name': 'Leaf Development',
+            'bbch': 'BBCH 1',
+            'color': '#90EE90',
+            'start': (5, 15), 'end': (6, 25), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-leaf',
+            'measurements': [],
+            'description': 'Intensive development of successive leaves (V1-V6).',
+        },
+        {
+            'key': 'bbch_3',
+            'name': 'Main Stem Elongation',
+            'bbch': 'BBCH 3',
+            'color': '#ADFF2F',
+            'start': (6, 20), 'end': (7, 20), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-arrow-up',
+            'measurements': [],
+            'description': 'Maximum height increase; best window for biomass measurement.',
+        },
+        {
+            'key': 'bbch_5',
+            'name': 'Tasseling',
+            'bbch': 'BBCH 5',
+            'color': '#FFD700',
+            'start': (7, 10), 'end': (8, 5), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-spa',
+            'measurements': [],
+            'description': 'Tasseling; critical stage for yield determination.',
+        },
+        {
+            'key': 'bbch_6',
+            'name': 'Flowering',
+            'bbch': 'BBCH 6',
+            'color': '#FFA500',
+            'start': (7, 20), 'end': (8, 15), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-sun',
+            'measurements': [],
+            'description': 'Tassel and cob flowering; drought reduces grain set.',
+        },
+        {
+            'key': 'bbch_7',
+            'name': 'Grain Development',
+            'bbch': 'BBCH 7',
+            'color': '#FF8C00',
+            'start': (8, 5), 'end': (9, 15), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-cube',
+            'measurements': [],
+            'description': 'Grain filling with starch.',
+        },
+        {
+            'key': 'bbch_8',
+            'name': 'Grain Ripening',
+            'bbch': 'BBCH 8',
+            'color': '#DAA520',
+            'start': (9, 10), 'end': (10, 15), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-star',
+            'measurements': [],
+            'description': 'Grain ripening and drying.',
+        },
+        {
+            'key': 'bbch_9',
+            'name': 'Senescence',
+            'bbch': 'BBCH 9',
+            'color': '#A0522D',
+            'start': (10, 10), 'end': (11, 5), 'year_offset': 0,
+            'importance': 'low',
+            'icon': 'fas fa-hourglass-end',
+            'measurements': [],
+            'description': 'Natural plant senescence after harvest.',
+        },
+    ],
+
+    # ── Sugar Beet ──────────────────────────────────────────
+    'sugar_beet': [
+        {
+            'key': 'bbch_0',
+            'name': 'Germination and Emergence',
+            'bbch': 'BBCH 0',
+            'color': '#8B4513',
+            'start': (3, 20), 'end': (4, 25), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-seedling',
+            'measurements': [],
+            'description': 'Germination and emergence; soil temperature >4°C required.',
+        },
+        {
+            'key': 'bbch_1',
+            'name': 'Leaf Development (Rosette)',
+            'bbch': 'BBCH 1',
+            'color': '#90EE90',
+            'start': (4, 20), 'end': (6, 20), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-leaf',
+            'measurements': [],
+            'description': 'Intensive development of the leaf rosette.',
+        },
+        {
+            'key': 'bbch_3',
+            'name': 'Row Closing',
+            'bbch': 'BBCH 3',
+            'color': '#ADFF2F',
+            'start': (6, 15), 'end': (7, 31), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-arrow-up',
+            'measurements': [],
+            'description': 'Row closing; maximum radiation interception.',
+        },
+        {
+            'key': 'bbch_4',
+            'name': 'Root Development',
+            'bbch': 'BBCH 4',
+            'color': '#FF8C00',
+            'start': (7, 15), 'end': (9, 30), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-cube',
+            'measurements': [],
+            'description': 'Beet root growth and sugar accumulation.',
+        },
+        {
+            'key': 'bbch_49',
+            'name': 'End of Vegetative Development',
+            'bbch': 'BBCH 49',
+            'color': '#DAA520',
+            'start': (9, 15), 'end': (11, 15), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-chart-line',
+            'measurements': [],
+            'description': 'Technological maturity achieved; optimal harvest window.',
+        },
+    ],
+
+    # ── Potato ───────────────────────────────────────────────────
+    'potato': [
+        {
+            'key': 'bbch_0',
+            'name': 'Germination (Sprout Development)',
+            'bbch': 'BBCH 0',
+            'color': '#8B4513',
+            'start': (4, 10), 'end': (5, 15), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-seedling',
+            'measurements': [],
+            'description': 'Tuber sprouting and sprout development; temperature >8°C required.',
+        },
+        {
+            'key': 'bbch_1',
+            'name': 'Leaf Development',
+            'bbch': 'BBCH 1',
+            'color': '#90EE90',
+            'start': (5, 10), 'end': (6, 1), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-leaf',
+            'measurements': [],
+            'description': 'Leaf development after emergence.',
+        },
+        {
+            'key': 'bbch_2',
+            'name': 'Side Shoot Formation',
+            'bbch': 'BBCH 2',
+            'color': '#228B22',
+            'start': (5, 20), 'end': (6, 15), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-layer-group',
+            'measurements': [],
+            'description': 'Side shoot formation and plant architecture development.',
+        },
+        {
+            'key': 'bbch_3',
+            'name': 'Main Stem Growth (Row Closing)',
+            'bbch': 'BBCH 3',
+            'color': '#ADFF2F',
+            'start': (6, 1), 'end': (6, 30), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-arrow-up',
+            'measurements': [],
+            'description': 'Row closing by the developing haulm.',
+        },
+        {
+            'key': 'bbch_4',
+            'name': 'Tuber Development',
+            'bbch': 'BBCH 4',
+            'color': '#7CFC00',
+            'start': (6, 15), 'end': (7, 31), 'year_offset': 0,
+            'importance': 'very_high',
+            'icon': 'fas fa-circle',
+            'measurements': [],
+            'description': 'Tuber initiation and intensive tuber growth.',
+        },
+        {
+            'key': 'bbch_5',
+            'name': 'Flower Bud Development',
+            'bbch': 'BBCH 5',
+            'color': '#FFD700',
+            'start': (6, 25), 'end': (7, 20), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-spa',
+            'measurements': [],
+            'description': 'Formation of flower buds.',
+        },
+        {
+            'key': 'bbch_6',
+            'name': 'Flowering',
+            'bbch': 'BBCH 6',
+            'color': '#FFA500',
+            'start': (7, 5), 'end': (7, 31), 'year_offset': 0,
+            'importance': 'high',
+            'icon': 'fas fa-sun',
+            'measurements': [],
+            'description': 'Potato flowering; late blight monitoring.',
+        },
+        {
+            'key': 'bbch_7',
+            'name': 'Fruit Development',
+            'bbch': 'BBCH 7',
+            'color': '#FF8C00',
+            'start': (7, 20), 'end': (8, 20), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-cube',
+            'measurements': [],
+            'description': 'Fruit (berry) development; haulm starts to decline.',
+        },
+        {
+            'key': 'bbch_8',
+            'name': 'Ripening',
+            'bbch': 'BBCH 8',
+            'color': '#DAA520',
+            'start': (8, 10), 'end': (9, 20), 'year_offset': 0,
+            'importance': 'medium',
+            'icon': 'fas fa-star',
+            'measurements': [],
+            'description': 'Tuber ripening and skin set.',
+        },
+        {
+            'key': 'bbch_9',
+            'name': 'Senescence',
+            'bbch': 'BBCH 9',
+            'color': '#A0522D',
+            'start': (9, 10), 'end': (10, 20), 'year_offset': 0,
+            'importance': 'low',
+            'icon': 'fas fa-hourglass-end',
+            'measurements': [],
+            'description': 'Natural haulm senescence; tuber harvest.',
+        },
+    ],
+}
+
+# Orbital repeat periods (days) for Central Poland ~52°N
+SATELLITE_REPEAT_PERIODS = {
+    'Sentinel-2A': 10,
+    'Sentinel-2B': 10,
+    'Sentinel-2C': 10,
+    'Landsat-8': 16,
+    'Landsat-9': 16,
+}
+
+
+def build_phases_with_dates(crop_type, season_year):
+    """
+    Convert PHENOLOGICAL_CALENDAR entries to dicts with actual date objects.
+    Handles cross-year phases for winter crops.
+    """
+    raw_phases = PHENOLOGICAL_CALENDAR.get(crop_type, [])
+    phases = []
+    for p in raw_phases:
+        start_m, start_d = p['start']
+        end_m, end_d = p['end']
+        year_offset = p.get('year_offset', 0)
+        cross_year = p.get('cross_year', False)
+
+        start_y = season_year + year_offset
+        if cross_year:
+            # Phase starts in start_y and ends in season_year
+            start_date = date(start_y, start_m, start_d)
+            end_date = date(season_year, end_m, end_d)
+        else:
+            start_date = date(start_y, start_m, start_d)
+            end_date = date(start_y, end_m, end_d)
+            if end_date < start_date:
+                # End wraps to next year
+                end_date = date(start_y + 1, end_m, end_d)
+
+        phase = {k: v for k, v in p.items() if k not in ('start', 'end', 'year_offset', 'cross_year')}
+        phase['start_date'] = start_date
+        phase['end_date'] = end_date
+        phases.append(phase)
+    return phases
+
+
+def get_phase_for_date(phases, check_date):
+    """Return the phenological phase active on check_date, or None."""
+    for phase in phases:
+        if phase['start_date'] <= check_date <= phase['end_date']:
+            return phase
+    return None
+
+
+def generate_satellite_calendar_for_season(bbox, season_start, season_end, center_lat, center_lon):
+    """
+    Generate expected satellite pass dates for the full season.
+
+    Uses Spectator.earth real data for the next ≤7 days,
+    then extrapolates using known orbital repeat cycles.
+    Returns sorted list of pass dicts.
+    """
+    today = date.today()
+
+    # --- Fetch real Spectator passes ---
+    sp = SpectatorClient()
+    real_result = sp.fetch_overpasses(
+        bbox,
+        satellites=["Sentinel-2A", "Sentinel-2B", "Sentinel-2C", "Landsat-8", "Landsat-9"],
+        days_before=0,
+        days_after=7,
+    )
+    real_passes_raw = real_result.get('overpasses', []) if 'error' not in real_result else []
+
+    # Build set of real (date, satellite) pairs to avoid duplicates
+    real_set = set()
+    all_passes = []
+    sat_anchors = {}
+
+    for op in real_passes_raw:
+        date_str = op.get('date_only', '')
+        sat = op.get('satellite', '')
+        if not date_str or not sat:
+            continue
+        try:
+            d = date.fromisoformat(date_str)
+        except ValueError:
+            continue
+        key = (date_str, sat)
+        if key not in real_set:
+            real_set.add(key)
+            all_passes.append({
+                'date': date_str,
+                'date_obj': d,
+                'satellite': sat,
+                'acquisition_status': op.get('acquisition_status', 'unknown'),
+                'is_real': True,
+                'source': 'Spectator.earth',
+            })
+        if sat not in sat_anchors:
+            sat_anchors[sat] = d
+
+    # --- Default anchors for extrapolation (typical Central Poland 2026) ---
+    DEFAULT_OFFSETS = {
+        'Sentinel-2A': 2,
+        'Sentinel-2B': 7,
+        'Sentinel-2C': 5,
+        'Landsat-8':   3,
+        'Landsat-9':  11,
+    }
+
+    for sat, period in SATELLITE_REPEAT_PERIODS.items():
+        anchor = sat_anchors.get(sat, today + timedelta(days=DEFAULT_OFFSETS.get(sat, 5)))
+
+        # Walk backwards to season_start
+        d = anchor
+        while d > season_start:
+            d -= timedelta(days=period)
+        if d < season_start:
+            d += timedelta(days=period)
+
+        while d <= season_end:
+            date_str = d.isoformat()
+            key = (date_str, sat)
+            if key not in real_set:
+                # Determine acquisition status estimate:
+                # Passes within the next 7 days may be verified by Spectator but weren't returned
+                days_from_today = (d - today).days
+                if 0 <= days_from_today <= 7:
+                    acq_status = 'unknown'
+                else:
+                    acq_status = 'estimated'
+
+                all_passes.append({
+                    'date': date_str,
+                    'date_obj': d,
+                    'satellite': sat,
+                    'acquisition_status': acq_status,
+                    'is_real': False,
+                    'source': 'Orbital repeat cycle estimate',
+                })
+            d += timedelta(days=period)
+
+    all_passes.sort(key=lambda x: x['date'])
+    return all_passes
 
 
 # ---------------------------------------------------------------------------

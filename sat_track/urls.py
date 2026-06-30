@@ -13,4 +13,11 @@ urlpatterns = [
     path('api/calendar-events/', views.calendar_events_api, name='calendar_events_api'),
     path('observation/delete/<int:obs_id>/', views.delete_observation, name='delete_observation'),
     path('event/<int:event_id>/', views.sentinel2_over_bbox, name='event_detail'),
+    # Measurement Planning
+    path('planner/', views.measurement_planner, name='measurement_planner'),
+    path('planner/<int:plan_id>/', views.measurement_plan_detail, name='plan_detail'),
+    path('planner/<int:plan_id>/delete/', views.measurement_plan_delete, name='plan_delete'),
+    # Spectrometer Viewer
+    path('spectrometer/', views.spectrometer_view, name='spectrometer'),
+    path('api/spectrometer/upload/', views.spectrometer_upload_api, name='spectrometer_upload_api'),
 ]
