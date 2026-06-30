@@ -34,12 +34,6 @@ ndvi_*.png
 fig_*.png
 output_*.png
 
-# Thesis and document files
-*.tex
-*.zip
-*.docx
-*.pdf
-*.pptx_extract/
 
 
 docs/
